@@ -260,7 +260,7 @@ public class Solid : MonoBehaviour, IPrioritizable
             // check again if riders overlapped with solids
             foreach (Actor actor in overlappedActors)
             {
-                actor.Squish();
+                actor.CheckOverlappingDeath();
             }
 
             // carry riders
@@ -295,8 +295,7 @@ public class Solid : MonoBehaviour, IPrioritizable
             // check again if riders overlapped with solids
             foreach (Actor actor in overlappedActors)
             {
-                //Debug.Log(xMove);
-                actor.Squish();
+                actor.CheckOverlappingDeath();
             }
 
             // carry riders

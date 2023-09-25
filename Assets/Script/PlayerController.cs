@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using System;
 
-public class PlayerController : Actor
+public class PlayerController : Actor, IInertiaReceiver
 {
     public new int UpdatePriority = (int)UpdatePriorityEnum.playerMovement;
 
@@ -369,6 +369,13 @@ public class PlayerController : Actor
     }
     #endregion
 
+    #region Inertia
+    public void ReceiveVelocity(Vector2 velocity)
+    {
+
+    }
+
+    #endregion
 
     #region Glove
     private void GloveCasting()
@@ -703,6 +710,10 @@ public class PlayerController : Actor
             }
         }
 
+        CheckOverlappingDeath();
+    }
+    public override void CheckOverlappingDeath()
+    {
         if (GamePhysics.GetOverlappedSolids(GetLeftBottomPoint(), GetRightTopPoint()).Length == 0)
             return;
 

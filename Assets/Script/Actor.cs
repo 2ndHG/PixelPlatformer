@@ -248,6 +248,13 @@ public class Actor : MonoBehaviour, IPrioritizable
     {
         // If overlaps, Kill Actor
     }
+    public virtual void CheckOverlappingDeath()
+    {
+        if (GamePhysics.GetOverlappedSolids(GetLeftBottomPoint(), GetRightTopPoint()).Length == 0)
+            return;
+
+        //Kill Object
+    }
     public virtual void PhysicUpdate()
     {
         //MoveX();

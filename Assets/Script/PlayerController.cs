@@ -53,6 +53,16 @@ public class PlayerController : Actor, IInertiaReceiver
     private readonly int holeCorrection = 2;
     private bool forceForward;
     #endregion
+
+    #region Inertia
+    [SerializeField] private bool enableInertia;
+    private Vector2 receivedInertia;
+    private float xInertiaVelocity, yInertiaVelocity;
+    [SerializeField] private int maxStoredInertiaFrame = 10;
+    private int storedInertiaFrame;
+    [SerializeField] private float yInertiaEachPixel;
+    #endregion
+
     #region Riding
     private int xAmountBeforeSquish, yAmountBeforeSquish;
     private int sideSquishCorrection = 6;
@@ -89,10 +99,9 @@ public class PlayerController : Actor, IInertiaReceiver
         HandleJump();
         HandleForward();
         CalculateVelocity();
+        Move();
 
-
-        MoveY(yVelocity / GamePhysics.FrameRate, null);
-        MoveX(xVelocity / GamePhysics.FrameRate, null);
+        
         UpdateRidingSolid();
     }
 
@@ -342,8 +351,49 @@ public class PlayerController : Actor, IInertiaReceiver
         }
     }
 
+    private void CalculateXInertia()
+    {
+        storedInertiaFrame++;
+
+        if (xInertiaVelocity == 0)
+            return;
+        // if not forwarding the same direction of Inertia, it decrease
+        if ((xInertiaVelocity < 0 && !leftForwardHolding ) || (xInertiaVelocity > 0 && !rightForwardHolding) || CheckSolidBelow())
+        {
+            int sign = MathF.Sign(xInertiaVelocity);
+            xInertiaVelocity -= sign * xStopAcceleration / GamePhysics.FrameRate;
+            if (MathF.Sign(xInertiaVelocity) != sign)
+            {
+                xInertiaVelocity = 0;
+            }
+        } 
+        else if((xInertiaVelocity < 0 && CheckSolidLeft()) || (xInertiaVelocity > 0 && CheckSolidRight()))
+        {
+            xInertiaVelocity = 0;
+        }
+    }
+    public void NormalJump()
+    {
+        // normal jump
+        ChangeState(State.Jump);
+
+        //Inertia
+        ConsumeInertiaVelocity();
+        yInertiaVelocity = CalculateYInertiaPixel(yInertiaVelocity);
+
+        yVelocity = yJumpVelocity + yInertiaVelocity + GamePhysics.Gravity / GamePhysics.FrameRate;
+        //Debug.Log(yVelocity);
+        yInertiaVelocity = 0;
+        jumpInputBuffer = 0;
+        frameAfterJump = 0;
+    }
+
     public void ForceJump(float yInitial, float jumpTime = 1)
     {
+        //cancel wall jump
+        wallJumping = false;
+        forceForward = false;
+
         // yVelocity will be yInitial at First Frame 
         yVelocity = yInitial + GamePhysics.Gravity / GamePhysics.FrameRate;
         forceJumpTimer = jumpTime;
@@ -360,7 +410,12 @@ public class PlayerController : Actor, IInertiaReceiver
 
         facing = -1 * facing;
         ChangeState(State.Jump);
-        yVelocity = yJumpVelocity + GamePhysics.Gravity / GamePhysics.FrameRate;
+
+        //Inertia
+        ConsumeInertiaVelocity();
+        yInertiaVelocity = CalculateYInertiaPixel(yInertiaVelocity);
+
+        yVelocity = yJumpVelocity + yInertiaVelocity + GamePhysics.Gravity / GamePhysics.FrameRate;
         jumpInputBuffer = 0;
         frameAfterJump = 0;
         xVelocity = direction * xMaxSpeed;
@@ -370,11 +425,37 @@ public class PlayerController : Actor, IInertiaReceiver
     #endregion
 
     #region Inertia
+    private float CalculateYInertiaPixel(float yInertia)
+    {
+        if (yInertia == 0)
+            return 0;
+        float yPixel = yInertia / yInertiaEachPixel;
+        float ac = - (2 * GamePhysics.Gravity * yPixel );
+        float yIncrease = (- 2 * yJumpVelocity + MathF.Sqrt(4 * yJumpVelocity * yJumpVelocity - 4 * ac) ) / 2;
+        return yIncrease;
+    }
     public void ReceiveVelocity(Vector2 velocity)
     {
+        if (!enableInertia)
+            return;
 
+        if (velocity.y < 0)
+            velocity.y = 0;
+        
+
+        receivedInertia = velocity;
+        storedInertiaFrame = 0;
     }
+    public void ConsumeInertiaVelocity()
+    {
+        if (storedInertiaFrame > maxStoredInertiaFrame)
+            return;
 
+        xInertiaVelocity = receivedInertia.x;
+        yInertiaVelocity = receivedInertia.y;
+        receivedInertia = Vector2.zero;
+        storedInertiaFrame = maxStoredInertiaFrame;
+    }
     #endregion
 
     #region Glove
@@ -389,8 +470,21 @@ public class PlayerController : Actor, IInertiaReceiver
         {
             CalculateXNormal();
             CalculateYNormal();
+            CalculateXInertia();
         }
-
+    }
+    private void Move()
+    {
+        if (currentState == State.Walk || currentState == State.Jump || currentState == State.Idle)
+        {
+            MoveY(yVelocity / GamePhysics.FrameRate, null);
+            MoveX((xVelocity + xInertiaVelocity) / GamePhysics.FrameRate, null);
+        } 
+        else
+        {
+            MoveY(yVelocity / GamePhysics.FrameRate, null);
+            MoveX(xVelocity / GamePhysics.FrameRate, null);
+        }
     }
     public void HandleJump()
     {
@@ -426,10 +520,7 @@ public class PlayerController : Actor, IInertiaReceiver
             if (CheckSolidBelow() || framesAfterGround <= coyoteFrames)
             {
                 // normal jump
-                ChangeState(State.Jump);
-                yVelocity = yJumpVelocity + GamePhysics.Gravity / GamePhysics.FrameRate;
-                jumpInputBuffer = 0;
-                frameAfterJump = 0;
+                NormalJump();
             } 
             else if(solidLeft && solidRight)
             {

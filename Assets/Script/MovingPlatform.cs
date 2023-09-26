@@ -56,11 +56,11 @@ public class MovingPlatform : Solid
             //Debug.Log(Vector2.Distance(endPoint1v, new Vector2(position.x + xRemainder, position.y + yRemainder)));
             if(Vector2.Distance(endPoint1v, new Vector2(position.x + xRemainder, position.y + yRemainder)) < minimumStep)
             {
-
+                //Debug.Log("Last Step");
                 if (position.x != endPoint1.x)
                     xRemainder = endPoint1.x - position.x;
                 if (position.y != endPoint1.y)
-                    xRemainder = endPoint1.y - position.y;
+                    yRemainder = endPoint1.y - position.y;
                 MoveXYIgnoreSolid(0, 0);
                 xRemainder = yRemainder = 0;
                 goingTo1 = false;
@@ -69,10 +69,11 @@ public class MovingPlatform : Solid
         }
         else if (Vector2.Distance(endPoint2v, new Vector2(position.x + xRemainder, position.y + yRemainder)) < minimumStep)
         {
+            //Debug.Log("Last Step");
             if (position.x != endPoint2.x)
                 xRemainder = endPoint2.x - position.x;
             if (position.y != endPoint2.y)
-                xRemainder = endPoint2.y - position.y;
+                yRemainder = endPoint2.y - position.y;
             MoveXYIgnoreSolid(0, 0);
             xRemainder = yRemainder = 0;
             goingTo1 = true;
@@ -82,6 +83,19 @@ public class MovingPlatform : Solid
         //Debug.Log(Vector2.Distance(endPoint2v, new Vector2(position.x + xRemainder, position.y + yRemainder)));
         return false;
     }
+    public void GiveVelocity()
+    {
+        foreach (Actor actor in GetAllRidingActors())
+        {
+            if (actor is IInertiaReceiver receiver)
+            {
+                if (goingTo1)
+                    receiver.ReceiveVelocity(-toEndPoint2Speed);
+                else
+                    receiver.ReceiveVelocity(toEndPoint2Speed);
+            }
+        }
+    }
     public override void PhysicUpdate()
     {
 
@@ -90,6 +104,7 @@ public class MovingPlatform : Solid
         CalculateStepX((goingTo1 ? -toEndPoint2Speed.x : toEndPoint2Speed.x) / GamePhysics.FrameRate);
         CalculateStepY((goingTo1 ? -toEndPoint2Speed.y : toEndPoint2Speed.y) / GamePhysics.FrameRate);
         MoveXYIgnoreSolid(0, 0); // parameters doesn't matter for this object.
+        GiveVelocity();
     }
     private void Start()
     {

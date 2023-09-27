@@ -39,6 +39,62 @@ public class GamePhysics : MonoBehaviour
         Collider2D hitCollider = Physics2D.Raycast(startPoint, Vector2.up, distance, Instance.solidLayer).collider;
         return hitCollider != null;
     }
+    public static Solid[] GetHorizontalSolids(Vector2 startPoint, Vector2 endPoint)
+    {
+        if(startPoint.y != endPoint.y)
+        {
+            Debug.Log("Invalid parameters are gived for GetHorizontalSolids()");
+            Debug.Break();
+        }
+        if (startPoint.x > endPoint.x)
+        {
+            Vector2 temp = startPoint;
+            startPoint = endPoint;
+            endPoint = temp;
+        }
+
+        startPoint += FloatFixed;
+        float distance = Vector2.Distance(endPoint + FloatFixed, startPoint);
+        RaycastHit2D[] hitSolids = Physics2D.RaycastAll(startPoint, Vector2.right, distance, Instance.solidLayer);
+        List<Solid> solids = new();
+        foreach (var hitSolid in hitSolids)
+        {
+            Solid solid = hitSolid.transform.GetComponent<Solid>();
+            if (solid != null)
+            {
+                solids.Add(solid);
+            }
+        }
+        return solids.ToArray();
+    }
+    public static Solid[] GetVerticleSolids(Vector2 startPoint, Vector2 endPoint)
+    {
+        if (startPoint.x != endPoint.x)
+        {
+            Debug.Log("Invalid parameters are gived for GetVerticleSolids()");
+            Debug.Break();
+        }
+        if (startPoint.y > endPoint.y)
+        {
+            Vector2 temp = startPoint;
+            startPoint = endPoint;
+            endPoint = temp;
+        }
+
+        startPoint += FloatFixed;
+        float distance = Vector2.Distance(endPoint + FloatFixed, startPoint);
+        RaycastHit2D[] hitSolids = Physics2D.RaycastAll(startPoint, Vector2.up, distance, Instance.solidLayer);
+        List<Solid> solids = new();
+        foreach (var hitSolid in hitSolids)
+        {
+            Solid solid = hitSolid.transform.GetComponent<Solid>();
+            if (solid != null)
+            {
+                solids.Add(solid);
+            }
+        }
+        return solids.ToArray();
+    }
     public static Solid[] GetOverlappedSolids(Vector2 leftBottom, Vector2 rightTop)
     {
         leftBottom += FloatFixed;

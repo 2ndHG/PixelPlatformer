@@ -67,6 +67,13 @@ public class PlayerController : Actor, IInertiaReceiver
     private int xAmountBeforeSquish, yAmountBeforeSquish;
     private int sideSquishCorrection = 6;
     #endregion
+
+    #region Glove
+    [SerializeField] private float gloveSpeed;
+    [SerializeField] private int gloveLengthAxis = 70, gloveLengthDiagonal = 50;
+    [SerializeField] private GameObject GloveHitPoint;
+    [SerializeField] private int gloveSizeAxis;
+    #endregion
     public PlayerController()
     {
         // 在這裡設定你想要的預設值
@@ -75,7 +82,7 @@ public class PlayerController : Actor, IInertiaReceiver
     }
     enum State
     {
-        Idle, Walk, Jump
+        Idle, Walk, Jump, Glove
     }
 
     private State currentState;
@@ -459,7 +466,157 @@ public class PlayerController : Actor, IInertiaReceiver
     #endregion
 
     #region Glove
-    private void GloveCasting()
+    private void UseGlove(Direction8 direction)
+    {
+        Vector2 axisSpeed = GetDirectionSpeed(direction, gloveSpeed);
+
+        float xSign = MathF.Sign(axisSpeed.x);
+        float ySign = MathF.Sign(axisSpeed.y);
+        Vector2 startPoint;
+        bool isDiagonal = true;
+        switch (direction)
+        {
+            case Direction8.LeftUp:
+                startPoint = GetLeftTopPoint();
+                break;
+            case Direction8.LeftDown:
+                startPoint = GetLeftBottomPoint();
+                break;
+            case Direction8.RightUp:
+                startPoint = GetRightTopPoint();
+                break;
+            case Direction8.RightDown:
+                startPoint = GetRightBottomPoint();
+                 break;
+
+            default:
+                isDiagonal = false;
+                startPoint = (GetLeftBottomPoint() + GetRightTopPoint() + Vector2.one) / 2;
+                break;
+        }
+
+        startPoint -= new Vector2(xSign, ySign);
+
+        bool contactedSolid = false;
+        if (isDiagonal)
+        {
+            Vector2 endPointH = startPoint, endPointV = startPoint;
+            endPointH.x -= 2 * xSign;
+            endPointV.y -= 2 * ySign;
+            Vector2 step = new(xSign, ySign);
+            List<Solid> contactSolids = new();
+            //Debug.Log(startPoint + "AND" + endPointH + "AND" + endPointV);
+            for (int i=-2; i<gloveLengthDiagonal; i++)
+            {
+                Solid[] detectedSolidsH = GamePhysics.GetHorizontalSolids(startPoint, endPointH);
+                foreach(Solid solid in detectedSolidsH)
+                {
+                    contactSolids.Add(solid);
+                    contactedSolid = true;
+                }
+                Solid[] detectedSolidsV = GamePhysics.GetVerticleSolids(startPoint, endPointV);
+                foreach (Solid solid in detectedSolidsV)
+                {
+                    contactSolids.Add(solid);
+                    contactedSolid = true;
+                }
+                if (contactedSolid)
+                    break;
+                // next step
+                
+                startPoint += step;
+                endPointH += step;
+                endPointV += step;
+                
+            }
+            foreach(Solid solid in contactSolids)
+            {
+                //Debug.Log("Grabbed: " + solid.name);
+                GloveHitPoint.transform.position = startPoint + new Vector2(0.5f, 0.5f);
+                GloveHitPoint.transform.parent = solid.transform;
+            }
+        }
+        else
+        {
+            // left or right
+            if(xSign != 0)
+            {
+                //left middle or right middle
+                if (xSign == -1)
+                    startPoint.x--;
+                startPoint.y -= gloveSizeAxis / 2;
+                startPoint.x += (size.width / 2) * xSign; // reach the edge of the actor
+
+                Vector2 endPoint = startPoint + new Vector2(0, gloveSizeAxis);
+                List<Solid> contactSolids = new();
+                for (int i=0; i<gloveLengthAxis; i++)
+                {
+                    Solid[] detectedSolidsV = GamePhysics.GetVerticleSolids(startPoint, endPoint);
+                    foreach (Solid solid in detectedSolidsV)
+                    {
+                        contactSolids.Add(solid);
+                        contactedSolid = true;
+                    }
+                    if (contactedSolid)
+                        break;
+                    // next step
+
+                    startPoint.x += xSign;
+                    endPoint.x += xSign;
+                }
+                foreach (Solid solid in contactSolids)
+                {
+                    //Debug.Log("Grabbed: " + solid.name);
+                    GloveHitPoint.transform.position = startPoint + new Vector2(.5f, 2.5f);
+                    GloveHitPoint.transform.parent = solid.transform;
+                }
+            }
+            //up and down
+            else
+            {
+                //left middle or right middle
+                if (ySign == -1)
+                    startPoint.y--;
+                startPoint.y += size.height / 2 * ySign; // reach the edge of the actor
+                startPoint.x -= gloveSizeAxis / 2;
+
+                Vector2 endPoint = startPoint + new Vector2(gloveSizeAxis, 0);
+                List<Solid> contactSolids = new();
+                for (int i = 0; i < gloveLengthAxis; i++)
+                {
+                    Solid[] detectedSolidsV = GamePhysics.GetHorizontalSolids(startPoint, endPoint);
+                    foreach (Solid solid in detectedSolidsV)
+                    {
+                        contactSolids.Add(solid);
+                        contactedSolid = true;
+                    }
+                    if (contactedSolid)
+                        break;
+                    // next step
+
+                    startPoint.y += ySign;
+                    endPoint.y += ySign;
+                }
+                foreach (Solid solid in contactSolids)
+                {
+                    //Debug.Log("Grabbed: " + solid.name);
+                    GloveHitPoint.transform.position = startPoint + new Vector2(2.5f, .5f);
+                    GloveHitPoint.transform.parent = solid.transform;
+                }
+            }
+        }
+
+        if(contactedSolid)
+        {
+            xRemainder = 0;
+            yRemainder = 0;
+            currentState = State.Glove;
+            xVelocity = axisSpeed.x;
+            yVelocity = axisSpeed.y;
+        }
+        
+    }
+    private void GloveBegin()
     {
 
     }
@@ -553,6 +710,30 @@ public class PlayerController : Actor, IInertiaReceiver
             facing = -1;
         else if (rightForwardHolding && !leftForwardHolding)
             facing = 1;
+    }
+
+    public Direction8 GetDirection()
+    {
+        if(Input.GetKey(KeyCode.UpArrow))
+        {
+            if (Input.GetKey(KeyCode.RightArrow))
+                return Direction8.RightUp;
+            else if (Input.GetKey(KeyCode.LeftArrow))
+                return Direction8.LeftUp;
+            return Direction8.Up;
+        } 
+        else if(Input.GetKey(KeyCode.DownArrow))
+        {
+            if (Input.GetKey(KeyCode.RightArrow))
+                return Direction8.RightDown;
+            else if (Input.GetKey(KeyCode.LeftArrow))
+                return Direction8.LeftDown;
+            return Direction8.Down;
+        }
+        if (facing == -1)
+            return Direction8.Left;
+        else
+            return Direction8.Right;
     }
     public void HandleInput()
     {
@@ -720,7 +901,80 @@ public class PlayerController : Actor, IInertiaReceiver
             transform.position = new Vector2(position.x, position.y);
         }
     }
-
+    private Vector2 GetDirectionSpeed(Direction8 direction, float speed)
+    {
+        Vector2 EachAxisSpeed = Vector2.zero;
+        switch (direction)
+        {
+            case Direction8.Left:
+                EachAxisSpeed.x = -1;
+                break;
+            case Direction8.Right:
+                EachAxisSpeed.x = 1;
+                break;
+            case Direction8.Up:
+                EachAxisSpeed.y = 1;
+                break;
+            case Direction8.Down:
+                EachAxisSpeed.y = -1;
+                break;
+            case Direction8.LeftUp:
+                EachAxisSpeed.x = -1;
+                EachAxisSpeed.y = 1;
+                break;
+            case Direction8.RightUp:
+                EachAxisSpeed.x = 1;
+                EachAxisSpeed.y = 1;
+                break;
+            case Direction8.LeftDown:
+                EachAxisSpeed.x = -1;
+                EachAxisSpeed.y = -1;
+                break;
+            case Direction8.RightDown:
+                EachAxisSpeed.x = 1;
+                EachAxisSpeed.y = -1;
+                break;
+        }
+        return EachAxisSpeed.normalized * speed;
+    }
+    private Vector2 GetDirectionLength(Direction8 direction, float Length)
+    {
+        Vector2 EachAxisLength = Vector2.zero;
+        switch (direction)
+        {
+            case Direction8.Left:
+                EachAxisLength.x = 1;
+                break;
+            case Direction8.Right:
+                EachAxisLength.x = 1;
+                break;
+            case Direction8.Up:
+                EachAxisLength.y = 1;
+                break;
+            case Direction8.Down:
+                EachAxisLength.y = -1;
+                break;
+            case Direction8.LeftUp:
+                EachAxisLength.x = -1;
+                EachAxisLength.y = 1;
+                break;
+            case Direction8.RightUp:
+                EachAxisLength.x = 1;
+                EachAxisLength.y = 1;
+                break;
+            case Direction8.LeftDown:
+                EachAxisLength.x = -1;
+                EachAxisLength.y = -1;
+                break;
+            case Direction8.RightDown:
+                EachAxisLength.x = 1;
+                EachAxisLength.y = -1;
+                break;
+        }
+        EachAxisLength.x = MathF.Round(EachAxisLength.x);
+        EachAxisLength.y = MathF.Round(EachAxisLength.y);
+        return EachAxisLength;
+    }
     public override void Squish()
     {
         // ceiling corner correction
@@ -820,5 +1074,9 @@ public class PlayerController : Actor, IInertiaReceiver
     private void Update()
     {
         HandleInput();
+        if(Input.GetKeyDown(KeyCode.C) )
+        {
+            UseGlove(GetDirection());
+        }
     }
 }

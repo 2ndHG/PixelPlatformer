@@ -137,7 +137,21 @@ public class GamePhysics : MonoBehaviour
         return actors.ToArray();
     }
 
-    
+    #region Updates
+    private int stopTimeStartFrame, stopTimeEndFrame;
+    public static void EngineStop(int frame)
+    {
+        Instance.stopTimeStartFrame = 0;
+        Instance.stopTimeEndFrame = frame;
+    }
+    private bool CheckStopTime()
+    {
+        Instance.stopTimeStartFrame++;
+        return Instance.stopTimeStartFrame <= Instance.stopTimeEndFrame;
+    }
+    #endregion
+
+
     private static GamePhysics _instance;
 
     // 使用List保存所有註冊的方法
@@ -160,9 +174,12 @@ public class GamePhysics : MonoBehaviour
             return _instance;
         }
     }
-
+    
     void FixedUpdate()
     {
+        if (CheckStopTime())
+            return;
+
         // 遍歷所有已註冊的方法，然後依序呼叫
         foreach (var updateMessage in registeredUpdateMessages)
         {

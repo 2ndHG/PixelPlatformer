@@ -238,7 +238,6 @@ public class Solid : MonoBehaviour, IPrioritizable
     }
     public virtual void MoveXYIgnoreSolid(int xAmount, int yAmount)
     {
-        //Debug.Log(xAmount);
         // Move Y
         int yMove = yAmount;
         if (yMove != 0)

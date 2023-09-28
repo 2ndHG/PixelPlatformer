@@ -148,7 +148,7 @@ MonoBehaviour:
   size:
     width: 24
     height: 8
-  speed: 60
+  speed: 30
   endPoint1:
     x: 184
     y: 144
@@ -210,11 +210,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 7878350319992209165, guid: 051623d7c0181054886ba98aa30f2738, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 280
+      value: 48
       objectReference: {fileID: 0}
     - target: {fileID: 7878350319992209165, guid: 051623d7c0181054886ba98aa30f2738, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 135
+      value: 32
       objectReference: {fileID: 0}
     - target: {fileID: 7878350319992209165, guid: 051623d7c0181054886ba98aa30f2738, type: 3}
       propertyPath: m_LocalPosition.z
@@ -296,7 +296,7 @@ MonoBehaviour:
   gloveLengthAxis: 70
   gloveLengthDiagonal: 50
   GloveHitPoint: {fileID: 463392090}
-  gloveSizeAxis: 4
+  sizeGloveAxis: 0
 --- !u!61 &423821756
 BoxCollider2D:
   m_ObjectHideFlags: 0
@@ -349,7 +349,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &463508405
 Transform:
   m_ObjectHideFlags: 0
@@ -1024,7 +1024,7 @@ MonoBehaviour:
   size:
     width: 24
     height: 8
-  speed: 60
+  speed: 30
   endPoint1:
     x: 120
     y: 120

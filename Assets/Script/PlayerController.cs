@@ -72,7 +72,12 @@ public class PlayerController : Actor, IInertiaReceiver
     [SerializeField] private float gloveSpeed;
     [SerializeField] private int gloveLengthAxis = 70, gloveLengthDiagonal = 50;
     [SerializeField] private GameObject GloveHitPoint;
-    [SerializeField] private int gloveSizeAxis;
+    [SerializeField] private int sizeGloveAxis;
+    private Position positionBeginGlove;
+    private readonly int gloveStopTimeFrame = 5;
+    private int gloveInputBuffer;
+    private readonly int gloveTolerantFrame = 5;
+    private Direction8 gloveDecidedDirection;
     #endregion
     public PlayerController()
     {
@@ -105,6 +110,7 @@ public class PlayerController : Actor, IInertiaReceiver
         //CheckSolidOnFrameStart();
         HandleJump();
         HandleForward();
+        HandleGlove();
         CalculateVelocity();
         Move();
 
@@ -468,6 +474,9 @@ public class PlayerController : Actor, IInertiaReceiver
     #region Glove
     private void UseGlove(Direction8 direction)
     {
+        // disable coyote jump
+        framesAfterGround = 11;
+
         Vector2 axisSpeed = GetDirectionSpeed(direction, gloveSpeed);
 
         float xSign = MathF.Sign(axisSpeed.x);
@@ -531,7 +540,6 @@ public class PlayerController : Actor, IInertiaReceiver
             }
             foreach(Solid solid in contactSolids)
             {
-                //Debug.Log("Grabbed: " + solid.name);
                 GloveHitPoint.transform.position = startPoint + new Vector2(0.5f, 0.5f);
                 GloveHitPoint.transform.parent = solid.transform;
             }
@@ -544,10 +552,10 @@ public class PlayerController : Actor, IInertiaReceiver
                 //left middle or right middle
                 if (xSign == -1)
                     startPoint.x--;
-                startPoint.y -= gloveSizeAxis / 2;
+                startPoint.y -= sizeGloveAxis / 2;
                 startPoint.x += (size.width / 2) * xSign; // reach the edge of the actor
 
-                Vector2 endPoint = startPoint + new Vector2(0, gloveSizeAxis);
+                Vector2 endPoint = startPoint + new Vector2(0, sizeGloveAxis);
                 List<Solid> contactSolids = new();
                 for (int i=0; i<gloveLengthAxis; i++)
                 {
@@ -578,9 +586,9 @@ public class PlayerController : Actor, IInertiaReceiver
                 if (ySign == -1)
                     startPoint.y--;
                 startPoint.y += size.height / 2 * ySign; // reach the edge of the actor
-                startPoint.x -= gloveSizeAxis / 2;
+                startPoint.x -= sizeGloveAxis / 2;
 
-                Vector2 endPoint = startPoint + new Vector2(gloveSizeAxis, 0);
+                Vector2 endPoint = startPoint + new Vector2(sizeGloveAxis, 0);
                 List<Solid> contactSolids = new();
                 for (int i = 0; i < gloveLengthAxis; i++)
                 {
@@ -608,17 +616,21 @@ public class PlayerController : Actor, IInertiaReceiver
 
         if(contactedSolid)
         {
+            gloveInputBuffer = 0;
             xRemainder = 0;
             yRemainder = 0;
             currentState = State.Glove;
             xVelocity = axisSpeed.x;
             yVelocity = axisSpeed.y;
         }
-        
     }
     private void GloveBegin()
     {
 
+    }
+    private void CalculateXYGlove()
+    {
+        framesAfterGround++;
     }
     #endregion
     public void CalculateVelocity()
@@ -628,6 +640,10 @@ public class PlayerController : Actor, IInertiaReceiver
             CalculateXNormal();
             CalculateYNormal();
             CalculateXInertia();
+        }
+        else if(currentState == State.Glove)
+        {
+            CalculateXYGlove();
         }
     }
     private void Move()
@@ -673,7 +689,7 @@ public class PlayerController : Actor, IInertiaReceiver
                     positionR.x++;
                 }
             }
-
+            
             if (CheckSolidBelow() || framesAfterGround <= coyoteFrames)
             {
                 // normal jump
@@ -711,7 +727,17 @@ public class PlayerController : Actor, IInertiaReceiver
         else if (rightForwardHolding && !leftForwardHolding)
             facing = 1;
     }
-
+    public void HandleGlove()
+    {
+        if (gloveInputBuffer > 0 && gloveInputBuffer < gloveTolerantFrame - 1)
+        {
+            UseGlove(gloveDecidedDirection);
+        }
+        //prevent first frame cast, because the direction is not decided.
+        else if (gloveInputBuffer == gloveTolerantFrame - 1)
+            gloveDecidedDirection = GetDirection();
+        gloveInputBuffer--;
+    }
     public Direction8 GetDirection()
     {
         if(Input.GetKey(KeyCode.UpArrow))
@@ -768,6 +794,13 @@ public class PlayerController : Actor, IInertiaReceiver
             rightForwardHolding = true;
         else
             rightForwardHolding = false;
+        #endregion
+        #region Glove
+        if(Input.GetKeyDown(KeyCode.C))
+        {
+            GamePhysics.EngineStop(gloveStopTimeFrame);
+            gloveInputBuffer = gloveTolerantFrame;
+        }
         #endregion
     }
 
@@ -843,6 +876,8 @@ public class PlayerController : Actor, IInertiaReceiver
                 else
                 {
                     //Hit a solid!
+                    yRemainder = 0;
+
                     if (onCollide != null)
                     {
                         xAmountBeforeSquish = 0;
@@ -1074,9 +1109,5 @@ public class PlayerController : Actor, IInertiaReceiver
     private void Update()
     {
         HandleInput();
-        if(Input.GetKeyDown(KeyCode.C) )
-        {
-            UseGlove(GetDirection());
-        }
     }
 }

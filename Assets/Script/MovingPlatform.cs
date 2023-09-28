@@ -53,7 +53,6 @@ public class MovingPlatform : Solid
     {
         if (goingTo1)
         {
-            //Debug.Log(Vector2.Distance(endPoint1v, new Vector2(position.x + xRemainder, position.y + yRemainder)));
             if(Vector2.Distance(endPoint1v, new Vector2(position.x + xRemainder, position.y + yRemainder)) < minimumStep)
             {
                 //Debug.Log("Last Step");
@@ -80,7 +79,6 @@ public class MovingPlatform : Solid
 
             return true;
         }
-        //Debug.Log(Vector2.Distance(endPoint2v, new Vector2(position.x + xRemainder, position.y + yRemainder)));
         return false;
     }
     public void GiveVelocity()

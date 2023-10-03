@@ -174,6 +174,10 @@ public class Solid : MonoBehaviour, IPrioritizable
             Actor[] isRidingMe = GetAllRidingActors();
             foreach (Actor actor in isRidingMe)
             {
+                if (actor is ISolidUpdateReceiver receiver)
+                {
+                    receiver.SolidUpdatesPosition(this, 0, totalMoves);
+                }
                 if (!movedActors.Contains(actor))  // if this actor was pushed, no need to move them again.
                 {
                     actor.MoveY(totalMoves, actor.Squish);
@@ -227,6 +231,10 @@ public class Solid : MonoBehaviour, IPrioritizable
             Actor[] isRidingMe = GetAllRidingActors();
             foreach (Actor actor in isRidingMe)
             {
+                if (actor is ISolidUpdateReceiver receiver)
+                {
+                    receiver.SolidUpdatesPosition(this, totalMoves, 0);
+                }
                 if (!movedActors.Contains(actor))  // if this actor was pushed, no need to move them again.
                 {
                     actor.MoveX(totalMoves, actor.Squish);
@@ -266,9 +274,15 @@ public class Solid : MonoBehaviour, IPrioritizable
             Actor[] isRidingMe = GetAllRidingActors();
             foreach (Actor actor in isRidingMe)
             {
+                if (actor is ISolidUpdateReceiver receiver)
+                {
+                    receiver.SolidUpdatesPosition(this, 0, yMove);
+                }
                 if (!movedActors.Contains(actor))  // if this actor was pushed, no need to move them again.
                 {
-                    actor.MoveY(yMove, actor.Squish);
+                    //actor.MoveY(yMove, actor.Squish);
+                    // Note: Previous code is above, now trying not squish actor when carrying
+                    actor.MoveY(yMove);
                 }
             }
         }
@@ -301,10 +315,15 @@ public class Solid : MonoBehaviour, IPrioritizable
             Actor[] isRidingMe = GetAllRidingActors();
             foreach (Actor actor in isRidingMe)
             {
+                if (actor is ISolidUpdateReceiver receiver)
+                {
+                    receiver.SolidUpdatesPosition(this, xMove, 0);
+                }
                 if (!movedActors.Contains(actor))  // if this actor was pushed, no need to move them again.
                 {
-                    actor.MoveX(xMove, actor.Squish);
-                    movedActors.Add(actor);
+                    //actor.MoveX(xMove, actor.Squish);
+                    // Note: Previous code is above, now trying not squish actor when carrying
+                    actor.MoveX(xMove);
                 }
             }
             

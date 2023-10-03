@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using System;
 
-public class PlayerController : Actor, IInertiaReceiver
+public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
 {
     public new int UpdatePriority = (int)UpdatePriorityEnum.playerMovement;
 
@@ -82,6 +82,7 @@ public class PlayerController : Actor, IInertiaReceiver
     private const int gloveCorrection = 3, gloveDiagonalCorrection = 6;
     private bool gloveDashing;
     private const float yGloveEndMultipiler = 0.7f;
+    private bool goingToBreakGlove;
     #endregion
     public PlayerController()
     {
@@ -656,11 +657,12 @@ public class PlayerController : Actor, IInertiaReceiver
             positionGoalGlove = position;
             positionGoalGlove.x += (int)xWillMove;
             positionGoalGlove.y += (int)yWillMove;
+            goingToBreakGlove = false;
 
             UpdateRidingSolidAndTell(solidToContact);
             //Debug.Log(positionGoalGlove.x + " " + positionGoalGlove.y);
-
             //Debug.Break();
+            Debug.ClearDeveloperConsole();
         }
     }
     private void GloveBegin()
@@ -671,15 +673,19 @@ public class PlayerController : Actor, IInertiaReceiver
     {
         float xStep = position.x + xRemainder + xVelocity / GamePhysics.FrameRate;
         float yStep = position.y + yRemainder + yVelocity / GamePhysics.FrameRate;
-        
 
-        if ((xGloveDirection > 0 ? xStep > positionGoalGlove.x : xStep < positionGoalGlove.x) || (yGloveDirection > 0 ? yStep > positionGoalGlove.y : yStep < positionGoalGlove.y))
+        bool xReachedGoal = (xGloveDirection > 0 && xStep > positionGoalGlove.x) || 
+            (xGloveDirection < 0 && xStep < positionGoalGlove.x);
+        bool yReachedGoal = (yGloveDirection > 0 && yStep > positionGoalGlove.y) || (yGloveDirection < 0 && yStep < positionGoalGlove.y);
+
+        if (xReachedGoal || yReachedGoal)
         {
             xRemainder = 0;
             yRemainder = 0;
             int preventDeathLoop = 0;
             bool going = true;
-            Debug.Log("Last Step");
+            //Debug.Log("Last Step");
+            
             while (going)
             {
                 if(preventDeathLoop > 20)
@@ -705,6 +711,7 @@ public class PlayerController : Actor, IInertiaReceiver
                 preventDeathLoop++;
             }
             BreakGlove();
+            GloveHitPoint.transform.parent = transform;
             return true;
         }
         return false;
@@ -713,6 +720,11 @@ public class PlayerController : Actor, IInertiaReceiver
     {
         if (GloveLastStep())
             return;
+        if(goingToBreakGlove)
+        {
+            BreakGlove();
+            return;
+        }
 
         bool yCorrected = false;
         bool xCorrected = false;
@@ -756,133 +768,154 @@ public class PlayerController : Actor, IInertiaReceiver
         // axis align correction
         else
         {
-            xLeftLimit = gloveCorrection + (position.x - positionBeginGlove.x);
-            xRightLimit = gloveCorrection - (position.x - positionBeginGlove.x);
-            yUpLimit = gloveCorrection - (position.y - positionBeginGlove.y);
-            yDownLimit = gloveCorrection + (position.y - positionBeginGlove.y);
+            xLeftLimit = gloveCorrection + (position.x - positionGoalGlove.x);
+            xRightLimit = gloveCorrection - (position.x - positionGoalGlove.x);
+            yUpLimit = gloveCorrection - (position.y - positionGoalGlove.y);
+            yDownLimit = gloveCorrection + (position.y - positionGoalGlove.y);
+            //check axis align break
+            if (yGloveDirection != 0 && Math.Abs(position.x - positionGoalGlove.x) > gloveCorrection)
+            {
+                breakingGlove = true;
+                Debug.Log("Break!");
+            }
+            else if (xGloveDirection != 0 && Math.Abs(position.y - positionGoalGlove.y) > gloveCorrection)
+            {
+                breakingGlove = true;
+                Debug.Log("Break!");
+            }
         }
 
-        // verticle
-        if (yGloveDirection != 0)
+        
+        if(!breakingGlove)
         {
-            if (yVelocity > 0 && CheckSolidAbove())
+            // verticle
+            if (yGloveDirection != 0)
             {
-                breakingGlove = true;
-                for (int i=1; i <= xRightLimit; i++)
+
+                if (yVelocity > 0 && CheckSolidAbove())
                 {
-                    if (!CheckSolidAbove(new Vector2(position.x + i, position.y)))
+                    breakingGlove = true;
+                    for (int i = 1; i <= xRightLimit; i++)
                     {
-                        GloveMoveX(i, null);
-                        yCorrected = true;
-                        breakingGlove = false;
-                        break;
-                    }
-                }
-                if(!yCorrected)
-                    for(int i = 1; i <= xLeftLimit; i++)
-                    {
-                        if (!CheckSolidAbove(new Vector2(position.x - i, position.y)))
+                        if (!CheckSolidAbove(new Vector2(position.x + i, position.y)))
                         {
-                            GloveMoveX(-i, null);
+                            //Debug.Log(xRightLimit);
+                            GloveMoveX(i, null);
+                            yCorrected = true;
                             breakingGlove = false;
                             break;
                         }
                     }
-            } 
-            else if(yVelocity < 0 && CheckSolidBelow())
-            {
-                breakingGlove = true;
-                for (int i = 1; i <= xRightLimit; i++)
-                {
-                    if (!CheckSolidBelow(new Vector2(position.x + i, position.y)))
-                    {
-                        GloveMoveX(i, null);
-                        yCorrected = true;
-                        breakingGlove = false;
-                        break;
-                    }
-                    
-                }
-                if (!yCorrected)
-                    for (int i=1; i<=xLeftLimit; i++)
-                    {
-                        if (!CheckSolidBelow(new Vector2(position.x - i, position.y)))
+                    if (!yCorrected)
+                        for (int i = 1; i <= xLeftLimit; i++)
                         {
-                            GloveMoveX(-i, null);
+                            if (!CheckSolidAbove(new Vector2(position.x - i, position.y)))
+                            {
+                                GloveMoveX(-i, null);
+                                breakingGlove = false;
+                                break;
+                            }
+                        }
+                }
+                else if (yVelocity < 0 && CheckSolidBelow())
+                {
+                    breakingGlove = true;
+                    for (int i = 1; i <= xRightLimit; i++)
+                    {
+                        if (!CheckSolidBelow(new Vector2(position.x + i, position.y)))
+                        {
+                            GloveMoveX(i, null);
+                            yCorrected = true;
                             breakingGlove = false;
                             break;
                         }
+
                     }
-                
+                    if (!yCorrected)
+                        for (int i = 1; i <= xLeftLimit; i++)
+                        {
+                            if (!CheckSolidBelow(new Vector2(position.x - i, position.y)))
+                            {
+                                GloveMoveX(-i, null);
+                                breakingGlove = false;
+                                break;
+                            }
+                        }
+
+                }
             }
-        } 
-        // horizontal glove
-        if (xGloveDirection != 0)
-        {
-            
-            if (xVelocity > 0 && CheckSolidRight())
+            // horizontal glove
+            if (xGloveDirection != 0)
             {
-                breakingGlove = true;
-                for (int i = 1; i <= yUpLimit; i++)
+
+                if (xVelocity > 0 && CheckSolidRight())
                 {
-                    if (!CheckSolidRight(new Vector2(position.x, position.y + i)))
+                    breakingGlove = true;
+                    for (int i = 1; i <= yUpLimit; i++)
                     {
-                        GloveMoveY(i, null);
-                        xCorrected = true;
-                        breakingGlove = false;
-                        break;
-                    }
-                }
-                if(!xCorrected)
-                {
-                    for (int i = 1; i <= yDownLimit; i++)
-                        if (!CheckSolidRight(new Vector2(position.x, position.y - i)))
+                        if (!CheckSolidRight(new Vector2(position.x, position.y + i)))
                         {
-                            GloveMoveY(-i, null);
+                            GloveMoveY(i, null);
+                            xCorrected = true;
                             breakingGlove = false;
                             break;
                         }
-                }
-                
-                
-            }
-            else if (xVelocity < 0 && CheckSolidLeft())
-            {
-                breakingGlove = true;
-                for (int i = 1; i <= yUpLimit; i++)
-                {
-                    if (!CheckSolidLeft(new Vector2(position.x, position.y + i)))
-                    {
-                        GloveMoveY(i, null);
-                        xCorrected = true;
-                        breakingGlove = false;
-                        break;
                     }
+                    if (!xCorrected)
+                    {
+                        for (int i = 1; i <= yDownLimit; i++)
+                            if (!CheckSolidRight(new Vector2(position.x, position.y - i)))
+                            {
+                                GloveMoveY(-i, null);
+                                breakingGlove = false;
+                                break;
+                            }
+                    }
+
+
                 }
-                if (!xCorrected)
+                else if (xVelocity < 0 && CheckSolidLeft())
                 {
-                    for (int i = 1; i <= yDownLimit; i++)
-                        if (!CheckSolidLeft(new Vector2(position.x, position.y - i)))
+                    breakingGlove = true;
+                    for (int i = 1; i <= yUpLimit; i++)
+                    {
+                        if (!CheckSolidLeft(new Vector2(position.x, position.y + i)))
                         {
-                            GloveMoveY(-i, null);
+                            GloveMoveY(i, null);
+                            xCorrected = true;
                             breakingGlove = false;
                             break;
                         }
+                    }
+                    if (!xCorrected)
+                    {
+                        for (int i = 1; i <= yDownLimit; i++)
+                            if (!CheckSolidLeft(new Vector2(position.x, position.y - i)))
+                            {
+                                GloveMoveY(-i, null);
+                                breakingGlove = false;
+                                break;
+                            }
+                    }
                 }
             }
         }
         
-
         if (breakingGlove)
         {
             BreakGlove();
         }
         framesAfterGround++;
     }
+    private void BreakGloveByOther()
+    {
+        goingToBreakGlove = true;
+    }
     public void BreakGlove()
     {
         if (currentState != State.Glove)
             return;
+        goingToBreakGlove = false;
         gloveDashing = false;
         forceJumpTimer = 1f;
         ChangeState(State.Jump);
@@ -1125,11 +1158,49 @@ public class PlayerController : Actor, IInertiaReceiver
         }
     
     }
+    public void SolidUpdatesPosition(Solid updater, int xAmount, int yAmount)
+    {
+        if(GetRidingSolid() == updater)
+        {
+            if(gloveDashing)
+            {
+                positionGoalGlove.x += xAmount;
+                positionGoalGlove.y += yAmount;
+            }
+        }
+    }
+    public void SolidDestroyed(Solid solid)
+    {
+        if (gloveDashing && GetRidingSolid() == solid)
+            BreakGlove();
+    }
     #endregion
     private void ResetAmountBeforeSquish()
     {
         xAmountBeforeSquish = 0;
         yAmountBeforeSquish = 0;
+    }
+    public bool CheckMoveYBreakGlove(int yAmount)
+    {
+        if (gloveDashing && yGloveDirection != 0 && xGloveDirection == 0)
+        {
+            if (MathF.Sign(yAmount) == -MathF.Sign(yGloveDirection))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+    public bool CheckMoveXBreakGlove(int xAmount)
+    {
+        if (gloveDashing && xGloveDirection != 0 && yGloveDirection == 0)
+        {
+            if (MathF.Sign(xAmount) == -MathF.Sign(xGloveDirection))
+            {
+                return true;
+            }
+        }
+        return false;
     }
     public override void MoveY(float amount, Action onCollide = null)
     {
@@ -1140,6 +1211,10 @@ public class PlayerController : Actor, IInertiaReceiver
         {
             yRemainder -= move;
             int sign = Math.Sign(move);
+
+            // opposite push breaks glove
+            //if (CheckMoveYBreakGlove(move))
+            //    BreakGloveByOther();
             while (move != 0)
             {
                 preventDeadLoop++;
@@ -1154,10 +1229,6 @@ public class PlayerController : Actor, IInertiaReceiver
                     //There is no Solid immediately beside us 
                     position.y += sign;
                     move -= sign;
-
-                    // if pushed while glove dashing, adjust the goal point
-                    if (gloveDashing)
-                        positionGoalGlove.y += sign;
                 }
                 else
                 {
@@ -1186,6 +1257,10 @@ public class PlayerController : Actor, IInertiaReceiver
         {
             xRemainder -= move;
             int sign = Math.Sign(move);
+
+            // opposite push breaks glove
+            //if (CheckMoveXBreakGlove(move))
+            //    BreakGloveByOther();
             while (move != 0)
             {
                 preventDeadLoop++;
@@ -1200,10 +1275,6 @@ public class PlayerController : Actor, IInertiaReceiver
                     //There is no Solid immediately beside us 
                     position.x += sign;
                     move -= sign;
-
-                    // if pushed while glove dashing, adjust the goal point
-                    if (gloveDashing)
-                        positionGoalGlove.x += sign;
                 }
                 else
                 {

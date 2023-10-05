@@ -136,7 +136,21 @@ public class GamePhysics : MonoBehaviour
 
         return actors.ToArray();
     }
-
+    public static bool CheckSolidInArea(Vector2 leftBottom, Vector2 rightTop, Solid targetSolid)
+    {
+        Solid[] overlappedSolids = GetOverlappedSolids(leftBottom, rightTop);
+        return overlappedSolids.Length > 0 && Array.IndexOf(overlappedSolids, targetSolid) > -1;
+    }
+    public static bool CheckSolidInPosition(Vector2 position, Solid targetSolid)
+    {
+        Solid[] overlappedSolids = GetHorizontalSolids(position, position);
+        return overlappedSolids.Length > 0 && Array.IndexOf(overlappedSolids, targetSolid) > -1;
+    }
+    public static bool CheckActorInArea(Vector2 leftBottom, Vector2 rightTop, Actor targetActor)
+    {
+        Actor[] overlappedSolids = GetOverlappedActors(leftBottom, rightTop);
+        return overlappedSolids.Length > 0 && Array.IndexOf(overlappedSolids, targetActor) > -1;
+    }
     #region Updates
     private int stopTimeStartFrame, stopTimeEndFrame;
     public static void EngineStop(int frame)

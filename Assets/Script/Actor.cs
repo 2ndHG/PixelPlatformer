@@ -13,6 +13,16 @@ public class Actor : MonoBehaviour, IPrioritizable
     [System.Serializable]
     protected struct Position
     {
+        public Position(int x, int y)
+        {
+            this.x = x;
+            this.y = y;
+        }
+        public Position(Vector2 value)
+        {
+            x = (int)value.x;
+            y = (int)value.y;
+        }
         public int x, y;
     }
     [System.Serializable]

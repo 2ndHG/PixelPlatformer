@@ -55,12 +55,13 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
     #endregion
 
     #region Inertia
+    [SerializeField] private int maxStoredInertiaFrame = 10;
     [SerializeField] private bool enableInertia;
     private Vector2 receivedInertia;
     private float xInertiaVelocity, yInertiaVelocity;
-    [SerializeField] private int maxStoredInertiaFrame = 10;
     private int storedInertiaFrame;
     [SerializeField] private float yInertiaEachPixel;
+    private bool appliedInertiaThisFrame;
     #endregion
 
     #region Riding
@@ -73,16 +74,19 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
     [SerializeField] private int gloveLengthAxis = 70, gloveLengthDiagonal = 50;
     [SerializeField] private GameObject GloveHitPoint;
     private const int sizeGloveAxis = 4;
+    private const int gloveStopTimeFrame = 4;
+    private const int gloveTolerantFrame = 15;
+    private const int gloveCorrection = 3, gloveDiagonalCorrection = 6;
+    private const float yGloveEndMultipiler = 0.7f;
+    private const float gloveBackToTrialPixel = 0.75f;
+
     private Position positionBeginGlove, positionGoalGlove;
-    private readonly int gloveStopTimeFrame = 4;
     private int gloveInputBuffer;
-    private readonly int gloveTolerantFrame = 15;
     private Direction8 gloveDecidedDirection;
     private int xGloveDirection, yGloveDirection;
-    private const int gloveCorrection = 3, gloveDiagonalCorrection = 6;
     private bool gloveDashing;
-    private const float yGloveEndMultipiler = 0.7f;
     private bool goingToBreakGlove;
+    [SerializeField] private bool puaseEditorOnGlove;
     #endregion
     public PlayerController()
     {
@@ -125,7 +129,6 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
 
     #region Normal
     // Normal: Idle, Jump, Walk
-
     private void HoleCorrectionLeft() 
     {
         if (CheckSolidLeft() && yVelocity != 0)
@@ -372,9 +375,14 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
     private void CalculateXInertia()
     {
         storedInertiaFrame++;
-
+        if(appliedInertiaThisFrame)
+        {
+            appliedInertiaThisFrame = false;
+            return;
+        }
         if (xInertiaVelocity == 0)
             return;
+
         // if not forwarding the same direction of Inertia, it decrease
         if ((xInertiaVelocity < 0 && !leftForwardHolding ) || (xInertiaVelocity > 0 && !rightForwardHolding) || CheckSolidBelow())
         {
@@ -443,6 +451,23 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
         wallJumping = true;
         forceForward = true;
     }
+    public void LeavePlatform()
+    {
+        MoveY(-1);
+        ConsumeInertiaVelocity();
+        if (facing == MathF.Sign(xInertiaVelocity))
+        {
+            xVelocity += xInertiaVelocity;
+            if (Math.Abs(xVelocity) > xMaxSpeed)
+            {
+                xInertiaVelocity = xVelocity - xMaxSpeed * facing;
+                xVelocity = facing * xMaxSpeed;
+            }
+            //Debug.Break();
+        }
+        else
+            xInertiaVelocity = 0;
+    }
     #endregion
 
     #region Inertia
@@ -462,7 +487,15 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
 
         if (velocity.y < 0)
             velocity.y = 0;
-        
+
+        //if fall and contact a fast moving platform, reduce current inertia
+        //int sign = Math.Sign(velocity.x);
+        //if (sign == Math.Sign(xInertiaVelocity))
+        //{
+        //    xInertiaVelocity -= velocity.x;
+        //    if (Math.Sign(xInertiaVelocity) != sign)
+        //        xInertiaVelocity = 0;
+        //}
 
         receivedInertia = velocity;
         storedInertiaFrame = 0;
@@ -471,7 +504,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
     {
         if (storedInertiaFrame > maxStoredInertiaFrame)
             return;
-
+        appliedInertiaThisFrame = true;
         xInertiaVelocity = receivedInertia.x;
         yInertiaVelocity = receivedInertia.y;
         receivedInertia = Vector2.zero;
@@ -564,7 +597,6 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
         }
         else
         {
-            
             // left or right
             if(xSign != 0)
             {
@@ -594,20 +626,16 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
                 
                 foreach (Solid solid in contactSolids)
                 {
-                    //Debug.Log("Grabbed: " + solid.name);
-                    GloveHitPoint.transform.position = startPoint + new Vector2(.5f, 2.5f);
-                    GloveHitPoint.transform.parent = solid.transform;
                     if(solidToContact == null)
                         solidToContact = solid;
                     else if (solidToContact.RidingPriority < solid.RidingPriority)
                         solidToContact = solid;
-
                 }
             }
             //up and down
             else
             {
-                //left middle or right middle
+                //up middle or down middle
                 if (ySign == -1)
                     startPoint.y--;
                 startPoint.y += size.height / 2 * ySign; // reach the edge of the actor
@@ -633,9 +661,6 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
                 }
                 foreach (Solid solid in contactSolids)
                 {
-                    //Debug.Log("Grabbed: " + solid.name);
-                    GloveHitPoint.transform.position = startPoint + new Vector2(2.5f, .5f);
-                    GloveHitPoint.transform.parent = solid.transform;
                     if (solidToContact == null)
                         solidToContact = solid;
                     else if (solidToContact.RidingPriority < solid.RidingPriority)
@@ -659,24 +684,45 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
             positionGoalGlove.y += (int)yWillMove;
             goingToBreakGlove = false;
 
+            //startPoint = DetectGloveExactPixel(startPoint, solidToContact);
+            GloveHitPoint.transform.position = startPoint + new Vector2(.5f, .5f);
+            GloveHitPoint.transform.parent = solidToContact.transform;
+
+            //DetectGloveSurface(new Position(startPoint), solidToContact);
             UpdateRidingSolidAndTell(solidToContact);
-            //Debug.Log(positionGoalGlove.x + " " + positionGoalGlove.y);
-            //Debug.Break();
-            Debug.ClearDeveloperConsole();
+            if(puaseEditorOnGlove)
+                Debug.Break();
         }
     }
-    private void GloveBegin()
-    {
-        gloveDashing = true;
-    }
+    
     private bool GloveLastStep()
     {
-        float xStep = position.x + xRemainder + xVelocity / GamePhysics.FrameRate;
-        float yStep = position.y + yRemainder + yVelocity / GamePhysics.FrameRate;
+        int xStep = (int) MathF.Round(position.x + xRemainder + xVelocity / GamePhysics.FrameRate);
+        int yStep = (int) MathF.Round(position.y + yRemainder + yVelocity / GamePhysics.FrameRate);
+        // get the x at outsided edge of the player, when player is at goal
+        bool xReachedGoal = false;
+        bool yReachedGoal = false;
+        if (IsDiagonal(gloveDecidedDirection))
+        {
+            //this is a very complicate detection, if x reach the goal , then check left check or right check whether the verticle pixels that close to the player overlapped with our glove-grabbed solid
+            float xEdge = xGloveDirection < 0 ? xStep - 1 : xStep + size.width;
+            //Debug.Log(xStep + " " + positionGoalGlove.x);
+            xReachedGoal = ((xGloveDirection > 0 && xStep >= positionGoalGlove.x) 
+                || (xGloveDirection < 0 && xStep <= positionGoalGlove.x)) 
+                && GamePhysics.CheckSolidInArea(new Vector2(xEdge, yStep - 1), new Vector2(xEdge, yStep + size.height), GetRidingSolid());
 
-        bool xReachedGoal = (xGloveDirection > 0 && xStep > positionGoalGlove.x) || 
-            (xGloveDirection < 0 && xStep < positionGoalGlove.x);
-        bool yReachedGoal = (yGloveDirection > 0 && yStep > positionGoalGlove.y) || (yGloveDirection < 0 && yStep < positionGoalGlove.y);
+            float yEdge = yGloveDirection < 0 ? yStep - 1 : yStep + size.height;
+            yReachedGoal = ((yGloveDirection > 0 && yStep >= positionGoalGlove.y)
+                || (yGloveDirection < 0 && yStep <= positionGoalGlove.y))
+                && GamePhysics.CheckSolidInArea(new Vector2(xStep - 1, yEdge), new Vector2(xStep + size.width, yEdge), GetRidingSolid());
+        }
+        else
+        {
+            if (IsUpOrDown(gloveDecidedDirection))
+                yReachedGoal = ((yGloveDirection > 0 && yStep > positionGoalGlove.y) || (yGloveDirection < 0 && yStep < positionGoalGlove.y));
+            else if (IsLeftOrRight(gloveDecidedDirection))
+                xReachedGoal = (xGloveDirection > 0 && xStep > positionGoalGlove.x) || (xGloveDirection < 0 && xStep < positionGoalGlove.x);
+        }
 
         if (xReachedGoal || yReachedGoal)
         {
@@ -684,7 +730,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
             yRemainder = 0;
             int preventDeathLoop = 0;
             bool going = true;
-            //Debug.Log("Last Step");
+            //Debug.Log((xReachedGoal ? "xReach" : "") + " " + (yReachedGoal ? "yReach" : "") + " Last Step");
             
             while (going)
             {
@@ -785,7 +831,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
             }
         }
 
-        
+        // start correction
         if(!breakingGlove)
         {
             // verticle
@@ -813,6 +859,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
                             {
                                 GloveMoveX(-i, null);
                                 breakingGlove = false;
+                                yCorrected = true;
                                 break;
                             }
                         }
@@ -838,6 +885,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
                             {
                                 GloveMoveX(-i, null);
                                 breakingGlove = false;
+                                yCorrected = true;
                                 break;
                             }
                         }
@@ -847,7 +895,6 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
             // horizontal glove
             if (xGloveDirection != 0)
             {
-
                 if (xVelocity > 0 && CheckSolidRight())
                 {
                     breakingGlove = true;
@@ -868,6 +915,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
                             {
                                 GloveMoveY(-i, null);
                                 breakingGlove = false;
+                                xCorrected = true;
                                 break;
                             }
                     }
@@ -894,18 +942,57 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
                             {
                                 GloveMoveY(-i, null);
                                 breakingGlove = false;
+                                xCorrected = true;
                                 break;
                             }
                     }
                 }
+                //Debug.Log(breakingGlove);
             }
+        }
+        bool corrected = xCorrected || yCorrected;
+
+        int xyDiff = 0;
+        if (!breakingGlove && IsDiagonal(gloveDecidedDirection))
+        {
+            xyDiff = Math.Abs(Math.Abs(position.x - positionGoalGlove.x) - Math.Abs(position.y - positionGoalGlove.y));
+            breakingGlove = xyDiff > gloveDiagonalCorrection;
         }
         
         if (breakingGlove)
         {
+            Debug.Log("Break" + xyDiff);
             BreakGlove();
         }
+
+        if (!breakingGlove && !corrected)
+            TryBackToGloveTrial();
+
         framesAfterGround++;
+    }
+    private void TryBackToGloveTrial()
+    {
+        //return;
+        //Try to back to the original trial
+        if (IsDiagonal(gloveDecidedDirection))
+        {
+            int xDistance = Math.Abs(positionGoalGlove.x - position.x);
+            int yDistance = Math.Abs(positionGoalGlove.y - position.y);
+            if (xDistance < yDistance)
+            {
+                MoveX(-gloveBackToTrialPixel * xGloveDirection);
+                if(Math.Abs(positionGoalGlove.x - position.x) == Math.Abs(positionGoalGlove.y - position.y))
+                    yRemainder = xRemainder = MathF.Min(xRemainder, yRemainder);
+                return;
+            }
+            else if (xDistance > yDistance)
+            {
+                MoveY(-gloveBackToTrialPixel* yGloveDirection);
+                if (Math.Abs(positionGoalGlove.x - position.x) == Math.Abs(positionGoalGlove.y - position.y))
+                    yRemainder = xRemainder = MathF.Min(xRemainder, yRemainder);
+                return;
+            }
+        }
     }
     private void BreakGloveByOther()
     {
@@ -923,20 +1010,32 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
         //base.UpdateRidingSolid() handles leaving from a solid to null
         base.UpdateRidingSolid();
 
+        ConsumeInertiaVelocity();
+        float xOuterInertia = xInertiaVelocity;
         if (MathF.Abs(xVelocity) > xMaxSpeed)
         {
             int sign = MathF.Sign(xVelocity);
             xInertiaVelocity = xVelocity - xMaxSpeed * sign;
-            //Debug.Log(xInertiaVelocity);
-            xVelocity = xMaxSpeed *sign;
+            xVelocity = xMaxSpeed * sign;
         }
-        yVelocity *= yGloveEndMultipiler;
+        xInertiaVelocity += xOuterInertia;
+        //Debug.Log("Break" + xInertiaVelocity);
+
+        yVelocity = (yVelocity + (yInertiaVelocity > 0 ? yInertiaVelocity : 0)) * yGloveEndMultipiler;
+        
+        if(yVelocity > yJumpVelocity)
+        {
+            yVelocity = yJumpVelocity + CalculateYInertiaPixel(yVelocity-yJumpVelocity);
+        }
+
         //if (yVelocity > yJumpVelocity)
         //{
-            
+
         //}
     }
     #endregion
+
+    #region General Loop
     public void CalculateVelocity()
     {
         if(currentState == State.Walk || currentState == State.Jump || currentState == State.Idle)
@@ -956,6 +1055,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
         {
             MoveY(yVelocity / GamePhysics.FrameRate, null);
             MoveX((xVelocity + xInertiaVelocity) / GamePhysics.FrameRate, null);
+
         } 
         else if(currentState == State.Glove)
         {
@@ -1109,7 +1209,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
         }
         #endregion
     }
-
+    #endregion
 
     #region Riding
     protected override void UpdateRidingSolid()
@@ -1119,7 +1219,12 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
 
             if (yVelocity == 0 && framesAfterGround == 0)
             {
+                Solid ridingSolid = GetRidingSolid();
                 base.UpdateRidingSolid();
+                if(GetRidingSolid() != ridingSolid)
+                {
+                    LeavePlatform();
+                }
                 return;
             }
             else
@@ -1186,6 +1291,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
         {
             if (MathF.Sign(yAmount) == -MathF.Sign(yGloveDirection))
             {
+                Debug.Log("break by other");
                 return true;
             }
         }
@@ -1212,9 +1318,6 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
             yRemainder -= move;
             int sign = Math.Sign(move);
 
-            // opposite push breaks glove
-            //if (CheckMoveYBreakGlove(move))
-            //    BreakGloveByOther();
             while (move != 0)
             {
                 preventDeadLoop++;
@@ -1258,9 +1361,6 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
             xRemainder -= move;
             int sign = Math.Sign(move);
 
-            // opposite push breaks glove
-            //if (CheckMoveXBreakGlove(move))
-            //    BreakGloveByOther();
             while (move != 0)
             {
                 preventDeadLoop++;
@@ -1383,6 +1483,18 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
         EachAxisLength.y = MathF.Round(EachAxisLength.y);
         return EachAxisLength;
     }
+    private bool IsDiagonal(Direction8 direction)
+    {
+        return direction > Direction8.Down;
+    }
+    private bool IsLeftOrRight(Direction8 direction)
+    {
+        return direction <= Direction8.Right;
+    }
+    private bool IsUpOrDown(Direction8 direction)
+    {
+        return direction >= Direction8.Up && direction <= Direction8.Down;
+    }
     public override void Squish()
     {
         // ceiling corner correction
@@ -1470,7 +1582,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
         if (GamePhysics.GetOverlappedSolids(GetLeftBottomPoint(), GetRightTopPoint()).Length == 0)
             return;
 
-        Debug.Log(xRemainder);
+        //Debug.Log(xRemainder);
         position.x = 280;
         position.y = 140;
         transform.position = new Vector2(position.x, position.y);

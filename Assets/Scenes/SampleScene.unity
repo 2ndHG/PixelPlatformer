@@ -358,6 +358,7 @@ MonoBehaviour:
   gloveLengthDiagonal: 50
   GloveHitPoint: {fileID: 463392090}
   puaseEditorOnGlove: 0
+  playerSprite: {fileID: 463508404}
 --- !u!61 &423821756
 BoxCollider2D:
   m_ObjectHideFlags: 0
@@ -1437,6 +1438,7 @@ MonoBehaviour:
   gloveLengthDiagonal: 50
   GloveHitPoint: {fileID: 638125073}
   puaseEditorOnGlove: 0
+  playerSprite: {fileID: 0}
 --- !u!61 &1582668417
 BoxCollider2D:
   m_ObjectHideFlags: 0

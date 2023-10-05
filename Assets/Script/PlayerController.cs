@@ -88,6 +88,8 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
     private bool goingToBreakGlove;
     [SerializeField] private bool puaseEditorOnGlove;
     #endregion
+    [SerializeField] private GameObject playerSprite;
+
     public PlayerController()
     {
         // 在這裡設定你想要的預設值
@@ -407,7 +409,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
         ChangeState(State.Jump);
 
         //Inertia
-        ConsumeInertiaVelocity();
+        ConsumeInertiaVelocity(true);
         yInertiaVelocity = CalculateYInertiaPixel(yInertiaVelocity);
 
         yVelocity = yJumpVelocity + yInertiaVelocity + GamePhysics.Gravity / GamePhysics.FrameRate;
@@ -437,11 +439,12 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
         // cancel any force jump, get back y control
         forceJumpTimer = 0;
 
-        facing = -1 * facing;
+        facing = direction;
         ChangeState(State.Jump);
 
         //Inertia
-        ConsumeInertiaVelocity();
+        //Debug.Log(receivedInertia.x+ " " + facing);
+        ConsumeInertiaVelocity(true);
         yInertiaVelocity = CalculateYInertiaPixel(yInertiaVelocity);
 
         yVelocity = yJumpVelocity + yInertiaVelocity + GamePhysics.Gravity / GamePhysics.FrameRate;
@@ -500,15 +503,19 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
         receivedInertia = velocity;
         storedInertiaFrame = 0;
     }
-    public void ConsumeInertiaVelocity()
+    public void ConsumeInertiaVelocity(bool willCleanStored = false)
     {
         if (storedInertiaFrame > maxStoredInertiaFrame)
             return;
         appliedInertiaThisFrame = true;
-        xInertiaVelocity = receivedInertia.x;
-        yInertiaVelocity = receivedInertia.y;
-        receivedInertia = Vector2.zero;
-        storedInertiaFrame = maxStoredInertiaFrame;
+        xInertiaVelocity = facing == MathF.Sign(receivedInertia.x) ? receivedInertia.x : 0;
+        //xInertiaVelocity =receivedInertia.x ;
+        if(willCleanStored)
+        {
+            yInertiaVelocity = receivedInertia.y;
+            receivedInertia = Vector2.zero;
+            storedInertiaFrame = maxStoredInertiaFrame;
+        }
     }
     #endregion
 
@@ -1595,5 +1602,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
     private void Update()
     {
         HandleInput();
+        playerSprite.transform.localScale = new Vector3(facing, 1, 1);
+        playerSprite.transform.localPosition = new Vector3(facing == -1 ? 12 : -4, 0, 0);
     }
 }

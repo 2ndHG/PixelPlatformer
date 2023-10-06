@@ -115,10 +115,10 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
 
     void CheckSolidOnFrameStart()
     {
-        solidCheck.above = CheckSolidAbove();
-        solidCheck.below = CheckSolidBelow();
-        solidCheck.left = CheckSolidLeft();
-        solidCheck.right = CheckSolidRight();
+        solidCheck.above = CheckPlatformAbove();
+        solidCheck.below = CheckPlatformBelow();
+        solidCheck.left = CheckPlatformLeft();
+        solidCheck.right = CheckPlatformRight();
     }
 
     public override void PhysicUpdate()
@@ -139,7 +139,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
     // Normal: Idle, Jump, Walk
     private void HoleCorrectionLeft() 
     {
-        if (CheckSolidLeft() && yVelocity != 0)
+        if (CheckPlatformLeft() && yVelocity != 0)
         {
             int sign = MathF.Sign(yVelocity);
             Vector2 assumingPosition = new(position.x - 1, position.y);
@@ -149,7 +149,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
             {
                 assumingPosition.y += sign;
                 nearbyPosition.y += sign;
-                if (!CheckSolidLeft(assumingPosition) && CheckSolidLeft(nearbyPosition))
+                if (!CheckPlatformLeft(assumingPosition) && CheckPlatformLeft(nearbyPosition))
                 {
                     MoveY(i * sign);
                     MoveX(-1);
@@ -160,7 +160,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
     }
     private void HoleCorrectionRight()
     {
-        if (CheckSolidRight() && yVelocity != 0)
+        if (CheckPlatformRight() && yVelocity != 0)
         {
             int sign = MathF.Sign(yVelocity);
             Vector2 assumingPosition = new(position.x + 1, position.y);
@@ -170,7 +170,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
             {
                 assumingPosition.y += sign;
                 nearbyPosition.y += sign;
-                if (!CheckSolidRight(assumingPosition) && CheckSolidRight(nearbyPosition))
+                if (!CheckPlatformRight(assumingPosition) && CheckPlatformRight(nearbyPosition))
                 {
                     MoveY(i * sign);
                     MoveX(1);
@@ -195,7 +195,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
             {
                 if (xVelocity <= 0)
                 {
-                    if(!CheckSolidLeft())
+                    if(!CheckPlatformLeft())
                     {
                         xVelocity -= xAcceleration / GamePhysics.FrameRate;
                         xVelocity = xVelocity <= -xMaxSpeed ? -xMaxSpeed : xVelocity;
@@ -225,7 +225,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
             {
                 if (xVelocity >= 0)
                 {
-                    if(!CheckSolidRight())
+                    if(!CheckPlatformRight())
                     {
                         xVelocity += xAcceleration / GamePhysics.FrameRate;
                         xVelocity = xVelocity >= xMaxSpeed ? xMaxSpeed : xVelocity;
@@ -287,7 +287,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
         }
 
         // gravity
-        if (CheckSolidBelow())
+        if (CheckPlatformBelow())
         {
             if (currentState == State.Idle)
             {
@@ -299,6 +299,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
                 ChangeState(State.Idle);
             }
             framesAfterGround = 0;
+
         }
         else
         {
@@ -321,14 +322,14 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
             }
 
             // slide or fall naturally
-            if ((leftForwardHolding && CheckSolidLeft()) || (rightForwardHolding && CheckSolidRight()))
+            if ((leftForwardHolding && CheckPlatformLeft()) || (rightForwardHolding && CheckPlatformRight()))
                 yVelocity = yVelocity < -yMaxSlideSpeed ? -yMaxSlideSpeed : yVelocity;
             else
                 yVelocity = yVelocity < -yMaxGravity ? -yMaxGravity : yVelocity;
 
             framesAfterGround++;
         }
-        if (CheckSolidAbove())
+        if (CheckPlatformAbove())
         {
             //Hit Ceiling
             //Corner correction
@@ -338,7 +339,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
                 if (xVelocity >= 0)
                     for (int i = 1; i <= cornerCorrection; i++)
                     {
-                        if (!CheckSolidAbove(new Vector2(position.x + i, position.y)))
+                        if (!CheckPlatformAbove(new Vector2(position.x + i, position.y)))
                         {
                             MoveX(i, null);
                             cornerCorrected = true;
@@ -349,7 +350,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
                 {
                     for (int i = 1; i <= cornerCorrection; i++)
                     {
-                        if (!CheckSolidAbove(new Vector2(position.x - i, position.y)))
+                        if (!CheckPlatformAbove(new Vector2(position.x - i, position.y)))
                         {
                             MoveX(-i, null);
                             cornerCorrected = true;
@@ -371,7 +372,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
             {
                 if (yVelocity > GamePhysics.Gravity / GamePhysics.FrameRate * yFastDecreaseMultiplier)
                     yVelocity = GamePhysics.Gravity / GamePhysics.FrameRate * yFastDecreaseMultiplier;
-                else if (CheckSolidBelow())
+                else if (CheckPlatformBelow())
                 {
                     //sandwiched
                     yVelocity = 0;
@@ -392,7 +393,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
             return;
 
         // if not forwarding the same direction of Inertia, it decrease
-        if ((xInertiaVelocity < 0 && !leftForwardHolding ) || (xInertiaVelocity > 0 && !rightForwardHolding) || CheckSolidBelow())
+        if ((xInertiaVelocity < 0 && !leftForwardHolding ) || (xInertiaVelocity > 0 && !rightForwardHolding) || CheckPlatformBelow())
         {
             int sign = MathF.Sign(xInertiaVelocity);
             xInertiaVelocity -= sign * xStopAcceleration / GamePhysics.FrameRate;
@@ -401,7 +402,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
                 xInertiaVelocity = 0;
             }
         } 
-        else if((xInertiaVelocity < 0 && CheckSolidLeft()) || (xInertiaVelocity > 0 && CheckSolidRight()))
+        else if((xInertiaVelocity < 0 && CheckPlatformLeft()) || (xInertiaVelocity > 0 && CheckPlatformRight()))
         {
             xInertiaVelocity = 0;
         }
@@ -855,12 +856,12 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
             if (yGloveDirection != 0)
             {
 
-                if (yVelocity > 0 && CheckSolidAbove())
+                if (yVelocity > 0 && CheckPlatformAbove())
                 {
                     breakingGlove = true;
                     for (int i = 1; i <= xRightLimit; i++)
                     {
-                        if (!CheckSolidAbove(new Vector2(position.x + i, position.y)))
+                        if (!CheckPlatformAbove(new Vector2(position.x + i, position.y)))
                         {
                             //Debug.Log(xRightLimit);
                             GloveMoveX(i, null);
@@ -872,7 +873,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
                     if (!yCorrected)
                         for (int i = 1; i <= xLeftLimit; i++)
                         {
-                            if (!CheckSolidAbove(new Vector2(position.x - i, position.y)))
+                            if (!CheckPlatformAbove(new Vector2(position.x - i, position.y)))
                             {
                                 GloveMoveX(-i, null);
                                 breakingGlove = false;
@@ -881,12 +882,12 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
                             }
                         }
                 }
-                else if (yVelocity < 0 && CheckSolidBelow())
+                else if (yVelocity < 0 && CheckPlatformBelow())
                 {
                     breakingGlove = true;
                     for (int i = 1; i <= xRightLimit; i++)
                     {
-                        if (!CheckSolidBelow(new Vector2(position.x + i, position.y)))
+                        if (!CheckPlatformBelow(new Vector2(position.x + i, position.y)))
                         {
                             GloveMoveX(i, null);
                             yCorrected = true;
@@ -898,7 +899,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
                     if (!yCorrected)
                         for (int i = 1; i <= xLeftLimit; i++)
                         {
-                            if (!CheckSolidBelow(new Vector2(position.x - i, position.y)))
+                            if (!CheckPlatformBelow(new Vector2(position.x - i, position.y)))
                             {
                                 GloveMoveX(-i, null);
                                 breakingGlove = false;
@@ -912,12 +913,12 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
             // horizontal glove
             if (xGloveDirection != 0)
             {
-                if (xVelocity > 0 && CheckSolidRight())
+                if (xVelocity > 0 && CheckPlatformRight())
                 {
                     breakingGlove = true;
                     for (int i = 1; i <= yUpLimit; i++)
                     {
-                        if (!CheckSolidRight(new Vector2(position.x, position.y + i)))
+                        if (!CheckPlatformRight(new Vector2(position.x, position.y + i)))
                         {
                             GloveMoveY(i, null);
                             xCorrected = true;
@@ -928,7 +929,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
                     if (!xCorrected)
                     {
                         for (int i = 1; i <= yDownLimit; i++)
-                            if (!CheckSolidRight(new Vector2(position.x, position.y - i)))
+                            if (!CheckPlatformRight(new Vector2(position.x, position.y - i)))
                             {
                                 GloveMoveY(-i, null);
                                 breakingGlove = false;
@@ -939,12 +940,12 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
 
 
                 }
-                else if (xVelocity < 0 && CheckSolidLeft())
+                else if (xVelocity < 0 && CheckPlatformLeft())
                 {
                     breakingGlove = true;
                     for (int i = 1; i <= yUpLimit; i++)
                     {
-                        if (!CheckSolidLeft(new Vector2(position.x, position.y + i)))
+                        if (!CheckPlatformLeft(new Vector2(position.x, position.y + i)))
                         {
                             GloveMoveY(i, null);
                             xCorrected = true;
@@ -955,7 +956,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
                     if (!xCorrected)
                     {
                         for (int i = 1; i <= yDownLimit; i++)
-                            if (!CheckSolidLeft(new Vector2(position.x, position.y - i)))
+                            if (!CheckPlatformLeft(new Vector2(position.x, position.y - i)))
                             {
                                 GloveMoveY(-i, null);
                                 breakingGlove = false;
@@ -1109,17 +1110,17 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
             {
                 if (!solidLeft)
                 {
-                    solidLeft = solidLeft || CheckSolidLeft(positionL);
+                    solidLeft = solidLeft || CheckPlatformLeft(positionL);
                     positionL.x--;
                 }
                 if (!solidRight)
                 {
-                    solidRight = solidRight || CheckSolidRight(positionR);
+                    solidRight = solidRight || CheckPlatformRight(positionR);
                     positionR.x++;
                 }
             }
             
-            if (CheckSolidBelow() || framesAfterGround <= coyoteFrames)
+            if (CheckPlatformBelow() || framesAfterGround <= coyoteFrames)
             {
                 // normal jump
                 NormalJump();
@@ -1263,12 +1264,12 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
                 Solid toRide = null;
 
                 // wall slide
-                if (leftForwardHolding && CheckSolidLeft())
+                if (leftForwardHolding && CheckPlatformLeft())
                 {
                     toRideSolids = GamePhysics.GetOverlappedSolids(new Vector2(position.x - 1, position.y), new Vector2(position.x - 1, position.y + size.height));
 
                 }
-                else if (rightForwardHolding && CheckSolidRight())
+                else if (rightForwardHolding && CheckPlatformRight())
                 {
                     toRideSolids = GamePhysics.GetOverlappedSolids(new Vector2(position.x + size.width, position.y), new Vector2(position.x + size.width, position.y + size.height));
                 }
@@ -1363,7 +1364,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
                     Debug.Break();
                     break;
                 }
-                if (sign < 0 ? !CheckSolidBelow() : !CheckSolidAbove())
+                if (sign < 0 ? !CheckPlatformBelow() : !CheckPlatformAbove())
                 {
                     //There is no Solid immediately beside us 
                     position.y += sign;
@@ -1406,7 +1407,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
                     Debug.Break();
                     break;
                 }
-                if (sign < 0 ? !CheckSolidLeft() : !CheckSolidRight())
+                if (sign < 0 ? !CheckPlatformLeft() : !CheckPlatformRight())
                 {
                     //There is no Solid immediately beside us 
                     position.x += sign;
@@ -1540,7 +1541,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
             bool corrected = false;
             for (int i = 1; i <= cornerCorrection; i++)
             {
-                if (!CheckSolidAbove(new Vector2(position.x + i, position.y)))
+                if (!CheckPlatformAbove(new Vector2(position.x + i, position.y)))
                 {
                     MoveX(i, null);
                     MoveY(yAmountBeforeSquish);
@@ -1551,7 +1552,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
             if (!corrected)
                 for (int i = 1; i <= cornerCorrection; i++)
                 {
-                    if (!CheckSolidAbove(new Vector2(position.x - i, position.y)))
+                    if (!CheckPlatformAbove(new Vector2(position.x - i, position.y)))
                     {
                         MoveX(-i, null);
                         MoveY(yAmountBeforeSquish);
@@ -1562,7 +1563,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
         // player is pushed downward, try leave the x axis that the pusher solid will come
         else if(yAmountBeforeSquish < 0)
         {
-            if (!CheckSolidAbove())
+            if (!CheckPlatformAbove())
             {
                 xAmountBeforeSquish = yAmountBeforeSquish = 0;
                 return;
@@ -1571,7 +1572,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
             bool corrected = false;
             for (int i = 1; i <= cornerCorrection; i++)
             {
-                if (!CheckSolidAbove(new Vector2(position.x + i, position.y)))
+                if (!CheckPlatformAbove(new Vector2(position.x + i, position.y)))
                 {
                     MoveX(i, null);
                     corrected = true;
@@ -1581,7 +1582,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
             if(!corrected)
                 for (int i = 1; i <= cornerCorrection; i++)
                 {
-                    if (!CheckSolidAbove(new Vector2(position.x - i, position.y)))
+                    if (!CheckPlatformAbove(new Vector2(position.x - i, position.y)))
                     {
                         MoveX(-i, null);
                         break;
@@ -1595,14 +1596,14 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
             for (int i = 1; i <= sideSquishCorrection; i ++)
             {
                 // check forward direction solid bottom corner point
-                if (sign < 0? !CheckSolidLeft(new Vector2(position.x, position.y-i)) : !CheckSolidRight(new Vector2(position.x, position.y - i)))
+                if (sign < 0? !CheckPlatformLeft(new Vector2(position.x, position.y-i)) : !CheckPlatformRight(new Vector2(position.x, position.y - i)))
                 {
                     MoveY(-i, null);
                     MoveX(xAmountBeforeSquish);
                     break;
                 }
                 // check the pusher solid bottom corner point
-                if (sign < 0 ? !CheckSolidRight(new Vector2(position.x - xAmountBeforeSquish, position.y - i)) : !CheckSolidLeft(new Vector2(position.x - xAmountBeforeSquish, position.y - i)))
+                if (sign < 0 ? !CheckPlatformRight(new Vector2(position.x - xAmountBeforeSquish, position.y - i)) : !CheckPlatformLeft(new Vector2(position.x - xAmountBeforeSquish, position.y - i)))
                 {
                     MoveY(-i, null);
                     MoveX(xAmountBeforeSquish);
@@ -1634,6 +1635,6 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
         playerSprite.transform.localScale = new Vector3(facing, 1, 1);
         playerSprite.transform.localPosition = new Vector3(facing == -1 ? 12 : -4, 0, 0);
         if (Input.GetKeyDown(KeyCode.L))
-            AssistanceLine.SetActive(!AssistanceLine.active);
+            AssistanceLine.SetActive(!AssistanceLine.activeSelf);
     }
 }

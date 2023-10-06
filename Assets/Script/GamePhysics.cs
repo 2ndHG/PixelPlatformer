@@ -30,43 +30,6 @@ public class GamePhysics : MonoBehaviour
         Collider2D hitCollider = Physics2D.Raycast(startPoint, Vector2.right, distance, Instance.solidLayer).collider;
         return hitCollider != null;
     }
-    private static bool CheckHorizontalOWPlatform(OneWayPlatform platform, float yCollidingPosition, float yCallerPosition, float callerHeight)
-    {
-        if (platform.collidingDirection == Direction8.Up)
-            return yCallerPosition > yCollidingPosition;
-        else if (platform.collidingDirection == Direction8.Down)
-            return yCallerPosition + callerHeight < yCollidingPosition;
-        else
-            return false;
-    }
-    private static bool CheckVerticleOWPlatform(OneWayPlatform platform, float xCollidingPosition, float xCallerPosition, float callerWidth)
-    {
-        if (platform.collidingDirection == Direction8.Left)
-            return xCollidingPosition > xCallerPosition;
-        else if (platform.collidingDirection == Direction8.Right)
-            return xCollidingPosition + callerWidth < xCallerPosition;
-        else
-            return false;
-    }
-    // check solid and one-way platform
-    public static bool CheckHorizontalPlatform(Vector2 startPoint, Vector2 endPoint, float yCallerPosition, float callerHeight)
-    {
-        if (startPoint.x > endPoint.x)
-        {
-            Vector2 temp = startPoint;
-            startPoint = endPoint;
-            endPoint = temp;
-        }
-        startPoint += FloatFixed;
-        float distance = Vector2.Distance(endPoint + FloatFixed, startPoint);
-        RaycastHit2D[] hitColliders = Physics2D.RaycastAll(startPoint, Vector2.right, distance, Instance.solidLayer);
-        foreach(RaycastHit2D hitSolid in hitColliders)
-        {
-            Solid solid = hitSolid.collider.GetComponent<Solid>();
-            return !solid.IsOneWayPlatform() || CheckHorizontalOWPlatform(solid.GetComponent<OneWayPlatform>(), startPoint.y, yCallerPosition, callerHeight);
-        }
-        return false;
-    }
     
     public static bool CheckVerticleSolid(Vector2 startPoint, Vector2 endPoint)
     {
@@ -82,6 +45,74 @@ public class GamePhysics : MonoBehaviour
         Collider2D hitCollider = Physics2D.Raycast(startPoint, Vector2.up, distance, Instance.solidLayer).collider;
         return hitCollider != null;
     }
+    // check solid and one-way platform
+    private static bool CheckHorizontalOWPlatform(OneWayPlatform platform, float yCollidingPosition, float yCallerPosition, float callerHeight)
+    {
+        if (platform.collidingDirection == Direction8.Up)
+            return yCallerPosition > yCollidingPosition;
+        else if (platform.collidingDirection == Direction8.Down)
+            return yCallerPosition + callerHeight < yCollidingPosition;
+        else
+            return false;
+    }
+    private static bool CheckVerticleOWPlatform(OneWayPlatform platform, float xCollidingPosition, float xCallerPosition, float callerWidth)
+    {
+        if (platform.collidingDirection == Direction8.Left)
+            return xCallerPosition + callerWidth < xCollidingPosition;
+        else if (platform.collidingDirection == Direction8.Right)
+            return xCallerPosition > xCollidingPosition;
+        else
+            return false;
+    }
+    public static bool CheckHorizontalPlatform(Vector2 startPoint, Vector2 endPoint, float yCallerPosition, float callerHeight)
+    {
+        if (startPoint.y != endPoint.y)
+        {
+            Debug.Log("Invalid parameters are gived for CheckHorizontalPlatform()");
+            Debug.Break();
+        }
+        if (startPoint.x > endPoint.x)
+        {
+            Vector2 temp = startPoint;
+            startPoint = endPoint;
+            endPoint = temp;
+        }
+        startPoint += FloatFixed;
+        float distance = Vector2.Distance(endPoint + FloatFixed, startPoint);
+        RaycastHit2D[] hitColliders = Physics2D.RaycastAll(startPoint, Vector2.right, distance, Instance.solidLayer);
+        foreach (RaycastHit2D hitSolid in hitColliders)
+        {
+            Solid solid = hitSolid.collider.GetComponent<Solid>();
+            return !solid.IsOneWayPlatform() || CheckHorizontalOWPlatform(solid.GetComponent<OneWayPlatform>(), startPoint.y, yCallerPosition, callerHeight);
+        }
+        return false;
+    }
+    public static bool CheckVerticlePlatform(Vector2 startPoint, Vector2 endPoint, float xCallerPosition, float callerWidth)
+    {
+        if (startPoint.x != endPoint.x)
+        {
+            Debug.Log("Invalid parameters are gived for CheckVerticlePlatform()");
+            Debug.Break();
+        }
+        if (startPoint.y > endPoint.y)
+        {
+            Vector2 temp = startPoint;
+            startPoint = endPoint;
+            endPoint = temp;
+        }
+
+        startPoint += FloatFixed;
+        float distance = Vector2.Distance(endPoint + FloatFixed, startPoint);
+        RaycastHit2D[] hitColliders = Physics2D.RaycastAll(startPoint, Vector2.up, distance, Instance.solidLayer);
+        foreach (RaycastHit2D hitSolid in hitColliders)
+        {
+            Solid solid = hitSolid.collider.GetComponent<Solid>();
+            return !solid.IsOneWayPlatform() || CheckVerticleOWPlatform(solid.GetComponent<OneWayPlatform>(), startPoint.x, xCallerPosition, callerWidth);
+        }
+        return false;
+    }
+
+    #region Get Solid
     public static Solid[] GetHorizontalSolids(Vector2 startPoint, Vector2 endPoint)
     {
         if(startPoint.y != endPoint.y)
@@ -179,6 +210,8 @@ public class GamePhysics : MonoBehaviour
 
         return actors.ToArray();
     }
+    #endregion
+
     public static bool CheckSolidInArea(Vector2 leftBottom, Vector2 rightTop, Solid targetSolid)
     {
         Solid[] overlappedSolids = GetOverlappedSolids(leftBottom, rightTop);

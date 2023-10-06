@@ -127,7 +127,7 @@ public class Solid : MonoBehaviour, IPrioritizable
         return ridingOnMeActors.ToArray();
     }
     #endregion
-    protected void InitializePosition()
+    protected virtual void InitializePosition()
     {
         position.x = (int)transform.position.x;
         position.y = (int)transform.position.y;

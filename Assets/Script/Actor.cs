@@ -112,6 +112,17 @@ public class Actor : MonoBehaviour, IPrioritizable
         destinationPosition.y += size.height - 1;
         return GamePhysics.CheckVerticleSolid(assumingPositon, destinationPosition);
     }
+    public bool CheckPlatformLeft()
+    {
+        return GamePhysics.CheckVerticlePlatform(GetLeftBottomPoint() + Vector2.left, GetLeftTopPoint() + Vector2.left, position.x, size.width);
+    }
+    public bool CheckPlatformLeft(Vector2 assumingPositon)
+    {
+        assumingPositon.x -= 1;
+        Vector2 destinationPosition = assumingPositon;
+        destinationPosition.y += size.height - 1;
+        return GamePhysics.CheckVerticlePlatform(assumingPositon, destinationPosition, position.x, size.width);
+    }
     public bool CheckSolidRight()
     {
         return GamePhysics.CheckVerticleSolid(GetRightBottomPoint() + Vector2.right, GetRightTopPoint() + Vector2.right);
@@ -123,7 +134,17 @@ public class Actor : MonoBehaviour, IPrioritizable
         destinationPosition.y += size.height - 1;
         return GamePhysics.CheckVerticleSolid(assumingPositon, destinationPosition);
     }
-
+    public bool CheckPlatformRight()
+    {
+        return GamePhysics.CheckVerticlePlatform(GetRightBottomPoint() + Vector2.right, GetRightTopPoint() + Vector2.right, position.x, size.width);
+    }
+    public bool CheckPlatformRight(Vector2 assumingPositon)
+    {
+        assumingPositon.x += size.width;
+        Vector2 destinationPosition = assumingPositon;
+        destinationPosition.y += size.height - 1;
+        return GamePhysics.CheckVerticlePlatform(assumingPositon, destinationPosition, position.x, size.width);
+    }
     public Actor[] GetActorsOverlapped()
     {
         return GamePhysics.GetOverlappedActors(GetLeftBottomPoint(), GetRightTopPoint());

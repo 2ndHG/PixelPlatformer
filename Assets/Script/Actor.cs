@@ -68,6 +68,17 @@ public class Actor : MonoBehaviour, IPrioritizable
         destinationPosition.x += size.width - 1;
         return GamePhysics.CheckHorizontalSolid(assumingPositon, destinationPosition);
     }
+    public bool CheckPlatformBelow()
+    {
+        return GamePhysics.CheckHorizontalPlatform(GetLeftBottomPoint() - Vector2.up, GetRightBottomPoint() - Vector2.up, position.y, size.height);
+    }
+    public bool CheckPlatformBelow(Vector2 assumingPositon)
+    {
+        assumingPositon.y -= 1;
+        Vector2 destinationPosition = assumingPositon;
+        destinationPosition.x += size.width - 1;
+        return GamePhysics.CheckHorizontalPlatform(assumingPositon, destinationPosition, position.y, size.height);
+    }
     public bool CheckSolidAbove()
     {
         return GamePhysics.CheckHorizontalSolid(GetLeftTopPoint() + Vector2.up, GetRightTopPoint() + Vector2.up);
@@ -78,6 +89,17 @@ public class Actor : MonoBehaviour, IPrioritizable
         Vector2 destinationPosition = assumingPositon;
         destinationPosition.x += size.width - 1;
         return GamePhysics.CheckHorizontalSolid(assumingPositon, destinationPosition);
+    }
+    public bool CheckPlatformAbove()
+    {
+        return GamePhysics.CheckHorizontalPlatform(GetLeftTopPoint() + Vector2.up, GetRightTopPoint() + Vector2.up, position.y, size.height);
+    }
+    public bool CheckPlatformAbove(Vector2 assumingPositon)
+    {
+        assumingPositon.y += size.height;
+        Vector2 destinationPosition = assumingPositon;
+        destinationPosition.x += size.width - 1;
+        return GamePhysics.CheckHorizontalPlatform(assumingPositon, destinationPosition, position.y, size.height);
     }
     public bool CheckSolidLeft()
     {

@@ -34,10 +34,16 @@ public class Solid : MonoBehaviour, IPrioritizable
     [SerializeField] protected Size size;
     #endregion
 
+    #region Self Information
+    public virtual bool IsOneWayPlatform()
+    {
+        return false;
+    }
+    #endregion
+
     #region Riding
     private List<Actor> ridingOnMeActors = new();
     private HashSet<Actor> movedActors = new HashSet<Actor>();
-
     #endregion
 
     public Vector2 GetLeftBottomPoint()

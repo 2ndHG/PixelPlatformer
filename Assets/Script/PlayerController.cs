@@ -82,14 +82,20 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
 
     private Position positionBeginGlove, positionGoalGlove;
     private int gloveInputBuffer;
+    private bool gloveHolding;
     private Direction8 gloveDecidedDirection;
     private int xGloveDirection, yGloveDirection;
     private bool gloveDashing;
     private bool goingToBreakGlove;
     [SerializeField] private bool puaseEditorOnGlove;
     #endregion
-    [SerializeField] private GameObject playerSprite;
+    [SerializeField] private GameObject playerSprite, AssistanceLine;
 
+
+    #region Glove Hang
+    private const int maxPixelsHangMove = 10;
+    private int pixelHangMoved;
+    #endregion
     public PlayerController()
     {
         // 在這裡設定你想要的預設值
@@ -98,7 +104,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
     }
     enum State
     {
-        Idle, Walk, Jump, Glove
+        Idle, Walk, Jump, Glove, GloveHang
     }
 
     private State currentState;
@@ -424,6 +430,8 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
         //cancel wall jump
         wallJumping = false;
         forceForward = false;
+        //cancel glove dashing
+        BreakGlove();
 
         // yVelocity will be yInitial at First Frame 
         yVelocity = yInitial + GamePhysics.Gravity / GamePhysics.FrameRate;
@@ -510,6 +518,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
         appliedInertiaThisFrame = true;
         xInertiaVelocity = facing == MathF.Sign(receivedInertia.x) ? receivedInertia.x : 0;
         //xInertiaVelocity =receivedInertia.x ;
+        //Debug.Log(xInertiaVelocity);
         if(willCleanStored)
         {
             yInertiaVelocity = receivedInertia.y;
@@ -678,6 +687,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
 
         if(contactedSolid)
         {
+            SetFacing(xGloveDirection);
             gloveDashing = true;
             gloveInputBuffer = 0;
             xRemainder = 0;
@@ -1016,7 +1026,10 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
 
         //base.UpdateRidingSolid() handles leaving from a solid to null
         base.UpdateRidingSolid();
+        // update facing
+        HandleForward();
 
+        xInertiaVelocity = 0;
         ConsumeInertiaVelocity();
         float xOuterInertia = xInertiaVelocity;
         if (MathF.Abs(xVelocity) > xMaxSpeed)
@@ -1041,7 +1054,12 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
         //}
     }
     #endregion
-
+    #region Glove Hang
+    private void GloveHangStart(Position startPosition)
+    {
+        pixelHangMoved = 0;
+    }
+    #endregion
     #region General Loop
     public void CalculateVelocity()
     {
@@ -1123,6 +1141,9 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
     }
     public void HandleForward()
     {
+        if (gloveDashing)
+            return;
+
         if (leftInputBuffer > 0)
         {
             leftInputBuffer = 0;
@@ -1140,11 +1161,15 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
     }
     public void HandleGlove()
     {
-        if( gloveInputBuffer == gloveTolerantFrame)
+        if (gloveInputBuffer == gloveTolerantFrame)
             gloveDecidedDirection = GetDirection();
         if (gloveInputBuffer > 0)
         {
             UseGlove(gloveDecidedDirection);
+        }
+        if (gloveDashing && !gloveHolding)
+        {
+            goingToBreakGlove = true;
         }
         //prevent first frame cast, because the direction is not decided.
         //else if (gloveInputBuffer == gloveTolerantFrame - 1)
@@ -1181,10 +1206,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
         {
             jumpInputBuffer = 6;
         }
-        if (Input.GetKey(KeyCode.Z))
-            jumpHolding = true;
-        else
-            jumpHolding = false;
+        jumpHolding = Input.GetKey(KeyCode.Z);
 
         // Debug: Auto Jump
         //jumpInputBuffer = 5;
@@ -1214,6 +1236,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
             GamePhysics.EngineStop(gloveStopTimeFrame);
             gloveInputBuffer = gloveTolerantFrame;
         }
+        gloveHolding = Input.GetKey(KeyCode.C);
         #endregion
     }
     #endregion
@@ -1287,6 +1310,12 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
             BreakGlove();
     }
     #endregion
+    public void SetFacing(int direction)
+    {
+        if (direction != -1 && direction != 1)
+            return;
+        facing = direction;
+    }
     private void ResetAmountBeforeSquish()
     {
         xAmountBeforeSquish = 0;
@@ -1604,5 +1633,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
         HandleInput();
         playerSprite.transform.localScale = new Vector3(facing, 1, 1);
         playerSprite.transform.localPosition = new Vector3(facing == -1 ? 12 : -4, 0, 0);
+        if (Input.GetKeyDown(KeyCode.L))
+            AssistanceLine.SetActive(!AssistanceLine.active);
     }
 }

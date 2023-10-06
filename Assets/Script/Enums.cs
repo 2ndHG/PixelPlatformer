@@ -1,8 +1,16 @@
 public class Enums
 {
-    public bool IsDiagonal(Direction8 direction)
+    public static bool IsDiagonal(Direction8 direction)
     {
         return direction > Direction8.Down;
+    }
+    public static bool IsLeftOrRight(Direction8 direction)
+    {
+        return direction <= Direction8.Right;
+    }
+    public static bool IsUpOrDown(Direction8 direction)
+    {
+        return direction >= Direction8.Up && direction <= Direction8.Down;
     }
 }
 

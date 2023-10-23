@@ -111,6 +111,39 @@ public class GamePhysics : MonoBehaviour
         }
         return false;
     }
+    public static bool CheckSpecificSolidInArea(Vector2 leftBottom, Vector2 rightTop, Solid targetSolid)
+    {
+        leftBottom += FloatFixed;
+        rightTop += FloatFixed;
+        Vector2 center = (leftBottom + rightTop) / 2;
+        Vector2 size = rightTop - leftBottom;
+        Collider2D[] colliders = Physics2D.OverlapBoxAll(center, size, 0f, Instance.solidLayer);
+
+        foreach (var collider in colliders)
+        {
+            Solid solid = collider.GetComponent<Solid>();
+            if (targetSolid == solid)
+                return true;
+        }
+        return false;
+    }
+    //public static bool CheckSpecificSolidInArea(Vector2 leftBottom, Vector2 rightTop, Solid targetSolid)
+    //{
+    //    Solid[] overlappedSolids = GetOverlappedSolids(leftBottom, rightTop);
+    //    return overlappedSolids.Length > 0 && Array.IndexOf(overlappedSolids, targetSolid) > -1;
+    //}
+    public static bool CheckSpecificSolidInPosition(Vector2 position, Solid targetSolid)
+    {
+        Solid[] overlappedSolids = GetHorizontalSolids(position, position);
+        return overlappedSolids.Length > 0 && Array.IndexOf(overlappedSolids, targetSolid) > -1;
+    }
+    public static bool CheckSpecificActorInArea(Vector2 leftBottom, Vector2 rightTop, Actor targetActor)
+    {
+        Actor[] overlappedSolids = GetOverlappedActors(leftBottom, rightTop);
+        return overlappedSolids.Length > 0 && Array.IndexOf(overlappedSolids, targetActor) > -1;
+    }
+
+
 
     #region Get Solid
     public static Solid[] GetHorizontalSolids(Vector2 startPoint, Vector2 endPoint)
@@ -212,21 +245,7 @@ public class GamePhysics : MonoBehaviour
     }
     #endregion
 
-    public static bool CheckSolidInArea(Vector2 leftBottom, Vector2 rightTop, Solid targetSolid)
-    {
-        Solid[] overlappedSolids = GetOverlappedSolids(leftBottom, rightTop);
-        return overlappedSolids.Length > 0 && Array.IndexOf(overlappedSolids, targetSolid) > -1;
-    }
-    public static bool CheckSolidInPosition(Vector2 position, Solid targetSolid)
-    {
-        Solid[] overlappedSolids = GetHorizontalSolids(position, position);
-        return overlappedSolids.Length > 0 && Array.IndexOf(overlappedSolids, targetSolid) > -1;
-    }
-    public static bool CheckActorInArea(Vector2 leftBottom, Vector2 rightTop, Actor targetActor)
-    {
-        Actor[] overlappedSolids = GetOverlappedActors(leftBottom, rightTop);
-        return overlappedSolids.Length > 0 && Array.IndexOf(overlappedSolids, targetActor) > -1;
-    }
+    
     #region Updates
     private int stopTimeStartFrame, stopTimeEndFrame;
     public static void EngineStop(int frame)
@@ -306,6 +325,8 @@ public class GamePhysics : MonoBehaviour
     {
         if (Input.GetKeyDown(KeyCode.Escape))
             Application.Quit();
+        if (Input.GetKeyDown(KeyCode.Space))
+            Debug.Break();
     }
 }
 

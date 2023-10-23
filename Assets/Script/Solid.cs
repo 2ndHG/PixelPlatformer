@@ -337,7 +337,12 @@ public class Solid : MonoBehaviour, IPrioritizable
 
 
     }
-    
+
+    #region Riding
+    public virtual void RequestVelocity(IInertiaReceiver receiver)
+    {
+    } 
+    #endregion
     public virtual void PhysicUpdate()
     {
     }

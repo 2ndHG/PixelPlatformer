@@ -19,6 +19,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
     }
     CheckSolid solidCheck;
     #endregion
+    
     #region Jump Control
     private int jumpInputBuffer, frameAfterJump;
     [SerializeField] private float yFastDecreaseMultiplier;
@@ -35,9 +36,12 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
     [SerializeField] private float yWallJumpOver;
     [SerializeField] private float wallJumpKeepYFrame;
 
+    // one-way platform jump
+    private const int yOWPJumpUpExtend = 1, yOWPJumpDownExtends = 3;
+
     // coyote time
     private int framesAfterGround = 0;
-    [SerializeField] private int coyoteFrames; 
+    private const int coyoteFrames = 5; 
 
     // Jump Input Cancel
     private bool jumpInputCancel;
@@ -77,10 +81,10 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
     private const int gloveStopTimeFrame = 4;
     private const int gloveTolerantFrame = 15;
     private const int gloveCorrection = 3, gloveDiagonalCorrection = 6;
-    private const float yGloveEndMultipiler = 0.7f;
+    private const float yGloveEndMultipiler = 0.75f, yGloveEndUpMultipiler = 0.8f;
     private const float gloveBackToTrialPixel = 0.75f;
 
-    private Position positionBeginGlove, positionGoalGlove;
+    private Position positionBeginGlove, positionGoalGlove, gloveExactHitPixel;
     private int gloveInputBuffer;
     private bool gloveHolding;
     private Direction8 gloveDecidedDirection;
@@ -89,13 +93,21 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
     private bool goingToBreakGlove;
     [SerializeField] private bool puaseEditorOnGlove;
     #endregion
-    [SerializeField] private GameObject playerSprite, AssistanceLine;
-
 
     #region Glove Hang
     private const int maxPixelsHangMove = 10;
-    private int pixelHangMoved;
+    private const int hangStoreInertiaMaxFrame = 8;
+    private bool gloveHanging;
+    [SerializeField] private float hangMoveSpeed;
+    private bool upwardHolding, downwardHolding;
+    private int upInputBuffer, downInputBuffer, verticleFacing;
+    private Solid hangingSolid;
+    private int frameAfterHang;
+    private Vector2 storedGloveInertia;
+    private Position hangStartPosition, hangingSolidPoint;
     #endregion
+    [SerializeField] private GameObject playerSprite, AssistanceLine;
+
     public PlayerController()
     {
         // 在這裡設定你想要的預設值
@@ -110,7 +122,10 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
     private State currentState;
     void ChangeState(State toState)
     {
-        currentState = toState;
+        if(toState != currentState)
+        {
+            currentState = toState;
+        }
     }
 
     void CheckSolidOnFrameStart()
@@ -128,6 +143,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
         HandleJump();
         HandleForward();
         HandleGlove();
+        HandleUpAndDown();
         CalculateVelocity();
         Move();
 
@@ -298,6 +314,15 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
                 yVelocity = 0;
                 ChangeState(State.Idle);
             }
+            else
+            {
+                if (yVelocity > 0 && (yVelocity < yJumpStartFastDecrease || !jumpHolding))
+                    yVelocity -= GamePhysics.Gravity / GamePhysics.FrameRate * yFastDecreaseMultiplier;
+                else if (yVelocity < yFastFallStart && yVelocity > yFastFallEnd)
+                    yVelocity -= GamePhysics.Gravity / GamePhysics.FrameRate * yFastFallMultiplier;
+                else
+                    yVelocity -= GamePhysics.Gravity / GamePhysics.FrameRate;
+            }
             framesAfterGround = 0;
 
         }
@@ -424,6 +449,8 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
         yInertiaVelocity = 0;
         jumpInputBuffer = 0;
         frameAfterJump = 0;
+        framesAfterGround = coyoteFrames + 1;
+        forceJumpTimer = 0;
     }
 
     public void ForceJump(float yInitial, float jumpTime = 1)
@@ -445,6 +472,10 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
 
     public void WallJump(int direction)
     {
+        // cannot jump
+        if (currentState == State.Glove)
+            return;
+
         // cancel any force jump, get back y control
         forceJumpTimer = 0;
 
@@ -460,6 +491,10 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
         jumpInputBuffer = 0;
         frameAfterJump = 0;
         xVelocity = direction * xMaxSpeed;
+        if(direction != Math.Sign(xInertiaVelocity))
+        {
+            xInertiaVelocity = 0;
+        }
         wallJumping = true;
         forceForward = true;
     }
@@ -569,16 +604,16 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
         Solid solidToContact = null;
         if (isDiagonal)
         {
-            startPoint -= new Vector2(xSign, ySign);
+            startPoint += new Vector2(xSign, ySign);
             Vector2 endPointH = startPoint, endPointV = startPoint;
             endPointH.x -= 2 * xSign;
             endPointV.y -= 2 * ySign;
             Vector2 step = new(xSign, ySign);
             List<Solid> contactSolids = new();
-            yWillMove -= 2 * ySign;
-            xWillMove -= 2 * xSign;
+            //yWillMove -= 2 * ySign;
+            //xWillMove -= 2 * xSign;
             //Debug.Log(startPoint + "AND" + endPointH + "AND" + endPointV);
-            for (int i=-2; i<gloveLengthDiagonal; i++)
+            for (int i=0; i<=gloveLengthDiagonal; i++)
             {
                 Solid[] detectedSolidsH = GamePhysics.GetHorizontalSolids(startPoint, endPointH);
                 foreach(Solid solid in detectedSolidsH)
@@ -702,7 +737,8 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
             positionGoalGlove.y += (int)yWillMove;
             goingToBreakGlove = false;
 
-            //startPoint = DetectGloveExactPixel(startPoint, solidToContact);
+            //gloveExactHitPixel = DetectGloveExactPixel(startPoint, solidToContact);
+            //startPoint = new Vector2 (gloveExactHitPixel.x, gloveExactHitPixel.y);
             GloveHitPoint.transform.position = startPoint + new Vector2(.5f, .5f);
             GloveHitPoint.transform.parent = solidToContact.transform;
 
@@ -727,12 +763,12 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
             //Debug.Log(xStep + " " + positionGoalGlove.x);
             xReachedGoal = ((xGloveDirection > 0 && xStep >= positionGoalGlove.x) 
                 || (xGloveDirection < 0 && xStep <= positionGoalGlove.x)) 
-                && GamePhysics.CheckSolidInArea(new Vector2(xEdge, yStep - 1), new Vector2(xEdge, yStep + size.height), GetRidingSolid());
+                && GamePhysics.CheckSpecificSolidInArea(new Vector2(xEdge, yStep - 1), new Vector2(xEdge, yStep + size.height), GetRidingSolid());
 
             float yEdge = yGloveDirection < 0 ? yStep - 1 : yStep + size.height;
             yReachedGoal = ((yGloveDirection > 0 && yStep >= positionGoalGlove.y)
                 || (yGloveDirection < 0 && yStep <= positionGoalGlove.y))
-                && GamePhysics.CheckSolidInArea(new Vector2(xStep - 1, yEdge), new Vector2(xStep + size.width, yEdge), GetRidingSolid());
+                && GamePhysics.CheckSpecificSolidInArea(new Vector2(xStep - 1, yEdge), new Vector2(xStep + size.width, yEdge), GetRidingSolid());
         }
         else
         {
@@ -774,7 +810,10 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
                 }
                 preventDeathLoop++;
             }
-            BreakGlove();
+            Solid toHang = ridingSolid;
+            //BreakGlove();
+            BreakGloveToHang();
+            GloveHangStart(position, toHang);
             GloveHitPoint.transform.parent = transform;
             return true;
         }
@@ -784,7 +823,8 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
     {
         if (GloveLastStep())
             return;
-        if(goingToBreakGlove)
+
+        if (goingToBreakGlove || CheckGloveAccidentFlyOver())
         {
             BreakGlove();
             return;
@@ -976,7 +1016,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
             xyDiff = Math.Abs(Math.Abs(position.x - positionGoalGlove.x) - Math.Abs(position.y - positionGoalGlove.y));
             breakingGlove = xyDiff > gloveDiagonalCorrection;
         }
-        
+
         if (breakingGlove)
         {
             Debug.Log("Break" + xyDiff);
@@ -987,6 +1027,11 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
             TryBackToGloveTrial();
 
         framesAfterGround++;
+    }
+    private bool CheckGloveAccidentFlyOver()
+    {
+        //accident flys over the goal
+        return MathF.Sign(position.x - positionGoalGlove.x) == xGloveDirection && MathF.Sign(position.y - positionGoalGlove.y) == yGloveDirection;
     }
     private void TryBackToGloveTrial()
     {
@@ -1016,6 +1061,11 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
     {
         goingToBreakGlove = true;
     }
+    private void BreakGloveToHang()
+    {
+        goingToBreakGlove = false;
+        gloveDashing = false;
+    }
     public void BreakGlove()
     {
         if (currentState != State.Glove)
@@ -1043,22 +1093,449 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
         //Debug.Log("Break" + xInertiaVelocity);
 
         yVelocity = (yVelocity + (yInertiaVelocity > 0 ? yInertiaVelocity : 0)) * yGloveEndMultipiler;
-        
-        if(yVelocity > yJumpVelocity)
+        if (gloveDecidedDirection == Direction8.Up)
+            yVelocity *= yGloveEndUpMultipiler;
+
+        if (yVelocity > yJumpVelocity)
         {
             yVelocity = yJumpVelocity + CalculateYInertiaPixel(yVelocity-yJumpVelocity);
         }
-
-        //if (yVelocity > yJumpVelocity)
-        //{
-
-        //}
+        //Debug.Log(yVelocity);
     }
-    #endregion
-    #region Glove Hang
-    private void GloveHangStart(Position startPosition)
+    private Position DetectGloveExactPixel(Vector2 startPoint, Solid solidToContact)
     {
-        pixelHangMoved = 0;
+        if (gloveDecidedDirection > Direction8.Down)
+            return new Position (startPoint);
+
+        Vector2 detectingPixel = startPoint;
+        // detect glove exact point
+        if (gloveDecidedDirection <= Direction8.Right)
+        {
+            detectingPixel.y += sizeGloveAxis;
+            for (int i = 1; i <= gloveLengthAxis; i++)
+            {
+                if (GamePhysics.CheckSpecificSolidInPosition(new Vector2(detectingPixel.x, detectingPixel.y - i), solidToContact))
+                {
+                    detectingPixel.y -= i;
+                    break;
+                }
+            }
+        }
+        else if (gloveDecidedDirection <= Direction8.Down)
+        {
+            detectingPixel = new(startPoint.x + 1, startPoint.y);
+            bool found = GamePhysics.CheckSpecificSolidInPosition(detectingPixel, solidToContact);
+            if (!found)
+            {
+                detectingPixel.x++;
+                found = GamePhysics.CheckSpecificSolidInPosition(detectingPixel, solidToContact);
+            }
+            if (!found)
+            {
+                detectingPixel.x++;
+                found = GamePhysics.CheckSpecificSolidInPosition(detectingPixel, solidToContact);
+            }
+            if (!found)
+            {
+                detectingPixel.x -= 3;
+            }
+        }
+
+        return new Position(detectingPixel);
+    }
+
+    #endregion
+
+    #region Glove Hang
+    private void GloveHangStart(Position startPosition, Solid toHang)
+    {
+        storedGloveInertia = new Vector2(xVelocity, yVelocity);
+        ChangeState(State.GloveHang);
+        gloveHanging = true;
+        UpdateRidingSolidAndTell(toHang);
+        hangingSolid = toHang;
+        hangStartPosition = startPosition;
+        hangingSolidPoint = GetHangingSolidPoint();
+        frameAfterHang = 0;
+        xRemainder = yRemainder = 0;
+        
+    }
+    private Position GetHangingSolidPoint()
+    {
+        bool checkPointX = false, checkPointY = false;
+        switch (gloveDecidedDirection)
+        {
+            case Direction8.LeftUp:
+                //left
+                checkPointX = GamePhysics.CheckSpecificSolidInArea(new Vector2(position.x - 1, position.y), new Vector2(position.x - 1, position.y + size.height - 1), hangingSolid);
+                //up
+                checkPointY = GamePhysics.CheckSpecificSolidInArea(new Vector2(position.x, position.y + size.height), new Vector2(position.x + size.width - 1, position.y + size.height), hangingSolid);
+                //Debug.Log(position.x + " " + (position.y + size.height));
+                //Debug.Log(position.x - size.width - 1 + " " + (position.y + size.height));
+                break;
+            case Direction8.LeftDown:
+                //left
+                checkPointX = GamePhysics.CheckSpecificSolidInArea(new Vector2(position.x - 1, position.y), new Vector2(position.x - 1, position.y + size.height - 1), hangingSolid);
+                //down
+                checkPointY = GamePhysics.CheckSpecificSolidInArea(new Vector2(position.x, position.y - 1), new Vector2(position.x + size.width - 1, position.y - 1), hangingSolid);
+                break;
+            case Direction8.RightUp:
+                //right
+                checkPointX = GamePhysics.CheckSpecificSolidInArea(new Vector2(position.x + size.width, position.y), new Vector2(position.x + size.width, position.y + size.height - 1), hangingSolid);
+                //up
+                checkPointY = GamePhysics.CheckSpecificSolidInArea(new Vector2(position.x, position.y + size.height), new Vector2(position.x + size.width - 1, position.y + size.height), hangingSolid);
+                break;
+            case Direction8.RightDown:
+                //right
+                checkPointX = GamePhysics.CheckSpecificSolidInArea(new Vector2(position.x + size.width, position.y), new Vector2(position.x + size.width, position.y + size.height - 1), hangingSolid);
+                //down
+                checkPointY = GamePhysics.CheckSpecificSolidInArea(new Vector2(position.x, position.y - 1), new Vector2(position.x + size.width - 1, position.y - 1), hangingSolid);
+                break;
+            case Direction8.Left:
+                //y = midpoint - glove detecting size /2
+                return DetectGloveExactPixel(new Vector2(position.x - 1, (2 * position.y + size.height + 1) / 2 - sizeGloveAxis / 2), hangingSolid);
+            case Direction8.Right:
+                //y = midpoint - glove detecting size /2
+                return DetectGloveExactPixel(new Vector2(position.x + size.width, (2 * position.y + size.height + 1) / 2 - sizeGloveAxis / 2), hangingSolid);
+            case Direction8.Up:
+                return DetectGloveExactPixel(new Vector2((2 * position.x + size.width + 1) / 2 - sizeGloveAxis / 2, position.y + size.height), hangingSolid);
+            case Direction8.Down:
+                return DetectGloveExactPixel(new Vector2((2 * position.x + size.width + 1) / 2 - sizeGloveAxis / 2, position.y - 1), hangingSolid);
+        }
+        Position returning = new(position.x + size.width / 2, position.y + size.height / 2);
+        if (checkPointX)
+        {
+            if (xGloveDirection == -1)
+                returning.x = position.x - 1;
+            else if (xGloveDirection == 1)
+                returning.x = position.x + size.width;
+        }
+        if (checkPointY)
+        {
+            if (yGloveDirection == -1)
+                returning.y = position.y - 1;
+            else if (yGloveDirection == 1)
+                returning.y = position.y + size.height;
+        }
+        if(!checkPointX && !checkPointY)
+        {
+            if (xGloveDirection == -1)
+            {
+                returning.x = position.x - 1;
+                
+            }
+            else if (xGloveDirection == 1)
+                returning.x = position.x + size.width;
+            if (yGloveDirection == -1)
+                returning.y = position.y - 1;
+            else if (yGloveDirection == 1)
+                returning.y = position.y + size.height;
+        }
+        //Debug.Log(checkPointX + "OK" + checkPointY);
+        return returning;
+    }
+    
+    private void CalculateYHang()
+    {
+        
+        if (upwardHolding || downwardHolding)
+        {
+            //Vector2 leftBottomEdge = GetLeftBottomPoint();
+            //Vector2 rightTopEdge = GetRightTopPoint();
+            //leftBottomEdge -= Vector2.one;
+            //rightTopEdge += Vector2.one;
+            //leftBottomEdge.y += verticleFacing;
+            //rightTopEdge.y += verticleFacing;
+            //// to prevent player pass through a hole
+            //if (verticleFacing == 1 && (position.y - hangStartPosition.y) > 0)
+            //    rightTopEdge.y -= 2;
+            //else if (verticleFacing == -1 && (position.y - hangStartPosition.y) < 0)
+            //    leftBottomEdge.y += 2;
+
+
+            //if (GamePhysics.CheckSpecificSolidInArea(leftBottomEdge, rightTopEdge, hangingSolid))
+            //    yVelocity = verticleFacing * hangMoveSpeed;
+            //else
+            //    yVelocity = 0;
+            yVelocity = verticleFacing * hangMoveSpeed;
+        }
+        else
+            yVelocity = 0;
+    }
+    private void CalculateXHang()
+    {
+        if (leftForwardHolding || rightForwardHolding)
+        {
+            //Vector2 leftBottomEdge = GetLeftBottomPoint();
+            //Vector2 rightTopEdge = GetRightTopPoint();
+            //leftBottomEdge -= Vector2.one;
+            //rightTopEdge += Vector2.one;
+            //leftBottomEdge.x += facing;
+            //rightTopEdge.x += facing;
+            //// to prevent player pass through a hole
+            //if (facing == 1 && (position.x - hangStartPosition.x) > 0)
+            //    rightTopEdge.x -= 2;
+            //else if (facing == -1 && (position.x - hangStartPosition.x) < 0)
+            //    leftBottomEdge.x += 2;
+
+
+            //if (GamePhysics.CheckSpecificSolidInArea(leftBottomEdge, rightTopEdge, hangingSolid))
+            //    xVelocity = facing * hangMoveSpeed;
+            //else
+            //{
+            //    xVelocity = 0;
+            //}
+            xVelocity = facing * hangMoveSpeed;
+        }
+        else
+            xVelocity = 0;
+    }
+    private bool CheckReachYMaxHang()
+    {
+        return Math.Abs(hangStartPosition.y - (int)(position.y + yRemainder + yVelocity / GamePhysics.FrameRate)) > maxPixelsHangMove;
+    }
+    private bool CheckReachXMaxHang()
+    {
+        return Math.Abs(hangStartPosition.x - (int)(position.x + xRemainder + xVelocity / GamePhysics.FrameRate)) > maxPixelsHangMove;
+    }
+    private void CalculateAndMoveHang()
+    {
+        if (CheckBreakHang())
+            return;
+
+        CalculateYHang();
+        if (CheckReachYMaxHang())
+            yRemainder = 0;
+        else
+            HangMoveY(yVelocity / GamePhysics.FrameRate);
+        CalculateXHang();
+
+        if (CheckReachXMaxHang())
+            xRemainder = 0;
+        else
+            HangMoveX(xVelocity / GamePhysics.FrameRate);
+        frameAfterHang++;
+    }
+    private bool CheckBreakHang()
+    {
+        Vector2 leftBottomEdge = GetLeftBottomPoint();
+        Vector2 rightTopEdge = GetRightTopPoint();
+        leftBottomEdge -= Vector2.one;
+        rightTopEdge += Vector2.one;
+        if (!gloveHolding || !GamePhysics.CheckSpecificSolidInArea(leftBottomEdge, rightTopEdge, hangingSolid))
+        {
+            BreakHang();
+            return true;
+        }
+        return false;
+    }
+    private void BreakHang()
+    {
+        //Debug.Log("break Hang");
+        if(frameAfterHang > hangStoreInertiaMaxFrame)
+        {
+            xVelocity = yVelocity = 0;
+            xInertiaVelocity = 0;
+        }
+        else
+        {
+            ConsumeInertiaVelocity();
+            xVelocity = Math.Abs(storedGloveInertia.x) > xMaxSpeed ? Math.Sign(storedGloveInertia.x) * xMaxSpeed : storedGloveInertia.x;
+            xInertiaVelocity = Math.Abs(storedGloveInertia.x) > xMaxSpeed ? storedGloveInertia.x - xVelocity : 0;
+
+            yVelocity = (storedGloveInertia.y + (yInertiaVelocity > 0 ? yInertiaVelocity : 0)) * yGloveEndMultipiler;
+            if (gloveDecidedDirection == Direction8.Up)
+                yVelocity *= yGloveEndUpMultipiler;
+            if (yVelocity > yJumpVelocity)
+            {
+                yVelocity = yJumpVelocity + CalculateYInertiaPixel(yVelocity - yJumpVelocity);
+            }
+            forceJumpTimer = 1f;
+            //Debug.Log(yVelocity);
+        }
+        gloveHanging = false;
+        ChangeState(State.Idle);
+    }
+    private void HangMoveY(float amount, Action onCollide = null)
+    {
+        yRemainder += amount;
+        int move = (int)Math.Round(yRemainder);
+        int preventDeadLoop = 0;
+        if (move != 0)
+        {
+            yRemainder -= move;
+            int sign = Math.Sign(move);
+
+            while (move != 0)
+            {
+                preventDeadLoop++;
+                if (preventDeadLoop == 50)
+                {
+                    Debug.Log("Infinite Loop");
+                    Debug.Break();
+                    break;
+                }
+                // check whether stick on solid after move
+                Position checkingPoint = new();
+                int middlePointX = position.x + size.width / 2;
+                // set checkingPoint to outer vertex
+                Vector2 leftBottom, rightTop;
+                if (middlePointX < hangingSolidPoint.x)
+                {
+                    checkingPoint.x = position.x + size.width;
+                    leftBottom = GetLeftBottomPoint();
+                    rightTop.y = position.y + size.height - 1;
+                    rightTop.x = position.x + size.width;
+                }
+                else
+                {
+                    checkingPoint.x = position.x - 1;
+                    leftBottom.x = position.x - 1;
+                    leftBottom.y = position.y;
+                    rightTop = GetRightTopPoint();
+                }
+
+                bool canMove = GamePhysics.CheckSpecificSolidInArea(leftBottom, rightTop, hangingSolid);
+                if(!canMove)
+                {
+                    if(sign < 0)
+                    {
+                        Vector2 newLeftBottom = new(checkingPoint.x < position.x ? checkingPoint.x : position.x, position.y - 1);
+                        Vector2 newRightTop = new(checkingPoint.x > position.x ? checkingPoint.x : position.x + size.width - 1, position.y - 1);
+                        canMove = GamePhysics.CheckSpecificSolidInArea(newLeftBottom, newRightTop, hangingSolid);
+                    }
+                    else
+                    {
+                        Vector2 newLeftBottom = new(checkingPoint.x < position.x ? checkingPoint.x : position.x, position.y + size.height);
+                        Vector2 newRightTop = new(checkingPoint.x > position.x ? checkingPoint.x : position.x + size.width - 1, position.y + size.height);
+                        canMove = GamePhysics.CheckSpecificSolidInArea(newLeftBottom, newRightTop, hangingSolid);
+                    }
+                }
+                //canMove = canMove || (sign < 0 ? GamePhysics.CheckSpecificSolidInPosition(new Vector2(checkingPoint.x, position.y - 1), hangingSolid) : GamePhysics.CheckSpecificSolidInPosition(new Vector2(checkingPoint.x, position.y + size.height), hangingSolid));
+
+                if (canMove)
+                {
+                    if (sign < 0 ? !CheckPlatformBelow() : !CheckPlatformAbove())
+                    {
+                        //There is no Solid immediately beside us 
+                        position.y += sign;
+                        move -= sign;
+                    }
+                    else
+                    {
+                        //Hit a solid!
+                        yRemainder = 0;
+
+                        if (onCollide != null)
+                        {
+                            xAmountBeforeSquish = 0;
+                            yAmountBeforeSquish = move;
+                            onCollide();
+                            ResetAmountBeforeSquish();
+                        }
+                        break;
+                    }
+                }
+                else
+                {
+                    // cannot move, because of not stick on original solid
+                    yRemainder = 0;
+                    break;
+                }
+               
+            }
+            transform.position = new Vector2(position.x, position.y);
+        }
+    }
+    private void HangMoveX(float amount, Action onCollide = null)
+    {
+        xRemainder += amount;
+        int preventDeadLoop = 0;
+        int move = (int)Math.Round(xRemainder);
+        if (move != 0)
+        {
+            xRemainder -= move;
+            int sign = Math.Sign(move);
+
+            while (move != 0)
+            {
+                preventDeadLoop++;
+                if (preventDeadLoop == 50)
+                {
+                    Debug.Log("Infinite Loop");
+                    Debug.Break();
+                    break;
+                }
+                // check whether stick on solid after move
+                Position checkingPoint = new();
+                int middlePointY = position.y + size.height / 2;
+                // set checkingPoint to outer vertex
+                Vector2 leftBottom, rightTop;
+                if (middlePointY < hangingSolidPoint.y)
+                {
+                    checkingPoint.y = position.y + size.height;
+                    leftBottom = GetLeftBottomPoint();
+                    rightTop.y = position.y + size.height;
+                    rightTop.x = position.x + size.width - 1;
+                }
+                else
+                {
+                    checkingPoint.y = position.y - 1;
+                    leftBottom.x = position.x;
+                    leftBottom.y = position.y - 1;
+                    rightTop = GetRightTopPoint();
+                }
+
+                bool canMove = GamePhysics.CheckSpecificSolidInArea(leftBottom, rightTop, hangingSolid);
+                if (!canMove)
+                {
+                    if (sign < 0)
+                    {
+                        Vector2 newLeftBottom = new(position.x - 1, checkingPoint.y < position.y ? checkingPoint.y : position.y);
+                        Vector2 newRightTop = new(position.x - 1, checkingPoint.y > position.y ? checkingPoint.y : position.y + size.height - 1);
+                        canMove = GamePhysics.CheckSpecificSolidInArea(newLeftBottom, newRightTop, hangingSolid);
+                    }
+                    else
+                    {
+                        Vector2 newLeftBottom = new(position.x + size.width, checkingPoint.y < position.y ? checkingPoint.y : position.y);
+                        Vector2 newRightTop = new(position.x + size.width, checkingPoint.y > position.y ? checkingPoint.y : position.y + size.height - 1);
+                        canMove = GamePhysics.CheckSpecificSolidInArea(newLeftBottom, newRightTop, hangingSolid);
+                    }
+                }
+
+                if (canMove)
+                {
+                    if (sign < 0 ? !CheckPlatformLeft() : !CheckPlatformRight())
+                    {
+                        //There is no Solid immediately beside us 
+                        position.x += sign;
+                        move -= sign;
+                    }
+                    else
+                    {
+                        //Hit a solid!
+                        xRemainder = 0;
+                        if (onCollide != null)
+                        {
+                            xAmountBeforeSquish = move;
+                            yAmountBeforeSquish = 0;
+                            onCollide();
+                            ResetAmountBeforeSquish();
+                        }
+                        break;
+                    }
+                }
+                else
+                {
+                    //Debug.Log(new Vector2(position.x, checkingPoint.y) + " " + new Vector2(position.x + size.width - 1, checkingPoint.y));
+                    // cannot move, because of not stick on original solid
+                    xRemainder = 0;
+                    break;
+                }
+                transform.position = new Vector2(position.x, position.y);
+
+            }
+        }
     }
     #endregion
     #region General Loop
@@ -1074,6 +1551,10 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
         {
             CalculateXYGlove();
         }
+        else if(currentState == State.GloveHang)
+        {
+            CalculateAndMoveHang();
+        }
     }
     private void Move()
     {
@@ -1088,6 +1569,10 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
             GloveMoveY(yVelocity / GamePhysics.FrameRate, null);
             GloveMoveX(xVelocity / GamePhysics.FrameRate, null);
         }
+        else if (currentState == State.GloveHang)
+        {
+            // do nothing here, move already combine into calculate.
+        }
     }
     public void HandleJump()
     {
@@ -1099,8 +1584,8 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
             jumpInputCancel = false;
             return;
         }
-        
-        if (jumpInputBuffer > 0 )
+
+        if (jumpInputBuffer > 0)
         {
             bool solidLeft = false;
             bool solidRight = false;
@@ -1119,12 +1604,35 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
                     positionR.x++;
                 }
             }
-            
-            if (CheckPlatformBelow() || framesAfterGround <= coyoteFrames)
+
+            bool normalJump = CheckPlatformBelow() || framesAfterGround <= coyoteFrames;
+            if(yVelocity > 0)
+            {
+                for (int i = -yOWPJumpDownExtends; !normalJump && i <= yOWPJumpUpExtend; i++)
+                {
+                    if (i != 0)
+                    {
+                        //the -1 is like check below
+                        Solid[] platforms = GamePhysics.GetHorizontalSolids(new Vector2(position.x, position.y + i - 1), new Vector2(position.x + size.width - 1, position.y + i - 1));
+                        foreach (Solid platform in platforms)
+                        {
+                            if (platform.IsOneWayPlatform() && platform.GetComponent<OneWayPlatform>().collidingDirection == Direction8.Up)
+                            {
+                                normalJump = true;
+                                Debug.Log("GO");
+                                break;
+                            }
+                        }
+
+                    }
+                }
+            }
+
+            if (normalJump)
             {
                 // normal jump
                 NormalJump();
-            } 
+            }
             else if(solidLeft && solidRight)
             {
                 WallJump(-facing);
@@ -1177,6 +1685,23 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
         //    gloveDecidedDirection = GetDirection();
         gloveInputBuffer--;
     }
+    public void HandleUpAndDown()
+    {
+        if (upInputBuffer > 0)
+        {
+            upInputBuffer = 0;
+            verticleFacing = 1;
+        }
+        else if (downInputBuffer > 0)
+        {
+            downInputBuffer = 0;
+            verticleFacing = -1;
+        }
+        else if (upwardHolding && !downwardHolding)
+            verticleFacing = 1;
+        else if (downwardHolding && !upwardHolding)
+            verticleFacing = -1;
+    }
     public Direction8 GetDirection()
     {
         if(Input.GetKey(KeyCode.UpArrow))
@@ -1207,6 +1732,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
         {
             jumpInputBuffer = 6;
         }
+        
         jumpHolding = Input.GetKey(KeyCode.Z);
 
         // Debug: Auto Jump
@@ -1239,6 +1765,24 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
         }
         gloveHolding = Input.GetKey(KeyCode.C);
         #endregion
+        #region Upward And Downward
+        if (Input.GetKeyDown(KeyCode.UpArrow))
+        {
+            upInputBuffer = 10;
+        }
+        if (Input.GetKeyDown(KeyCode.DownArrow))
+        {
+            downInputBuffer = 10;
+        }
+        if (Input.GetKey(KeyCode.UpArrow))
+            upwardHolding = true;
+        else
+            upwardHolding = false;
+        if (Input.GetKey(KeyCode.DownArrow))
+            downwardHolding = true;
+        else
+            downwardHolding = false;
+        #endregion
     }
     #endregion
 
@@ -1250,6 +1794,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
 
             if (yVelocity == 0 && framesAfterGround == 0)
             {
+                // leave a solid platform before next frame that its x catch us again.
                 Solid ridingSolid = GetRidingSolid();
                 base.UpdateRidingSolid();
                 if(GetRidingSolid() != ridingSolid)
@@ -1302,6 +1847,11 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
             {
                 positionGoalGlove.x += xAmount;
                 positionGoalGlove.y += yAmount;
+            }
+            if (gloveHanging)
+            {
+                hangingSolidPoint.x += xAmount;
+                hangingSolidPoint.y += yAmount;
             }
         }
     }
@@ -1622,6 +2172,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
         //Debug.Log(xRemainder);
         position.x = 280;
         position.y = 140;
+        ChangeState(State.Idle);
         transform.position = new Vector2(position.x, position.y);
     }
     private void Start()
@@ -1636,5 +2187,9 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
         playerSprite.transform.localPosition = new Vector3(facing == -1 ? 12 : -4, 0, 0);
         if (Input.GetKeyDown(KeyCode.L))
             AssistanceLine.SetActive(!AssistanceLine.activeSelf);
+        //if (Input.GetKeyDown(KeyCode.T))
+        //{
+        //    Debug.Log(GamePhysics.CheckSpecificSolidInArea(new Vector2(152, 48), new Vector2(157, 48), hangingSolid));
+        //}
     }
 }

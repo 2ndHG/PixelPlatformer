@@ -94,6 +94,11 @@ public class MovingPlatform : Solid
             }
         }
     }
+    public override void RequestVelocity(IInertiaReceiver receiver)
+    {
+        receiver.ReceiveVelocity(goingTo1 ? -toEndPoint2Speed : toEndPoint2Speed);
+    }
+
     public override void PhysicUpdate()
     {
 

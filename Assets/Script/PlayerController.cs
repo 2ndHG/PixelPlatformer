@@ -103,7 +103,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
     private int upInputBuffer, downInputBuffer, verticleFacing;
     private Solid hangingSolid;
     private int frameAfterHang;
-    private Vector2 storedGloveInertia;
+    private Vector2 storedHangInertia;
     private Position hangStartPosition, hangingSolidPoint;
     #endregion
     [SerializeField] private GameObject playerSprite, AssistanceLine;
@@ -1170,7 +1170,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
     #region Glove Hang
     private void GloveHangStart(Position startPosition, Solid toHang)
     {
-        storedGloveInertia = new Vector2(xVelocity, yVelocity);
+        storedHangInertia = new Vector2(xVelocity, yVelocity);
         gloveInertia = new Vector2(xVelocity, yVelocity);
         storedGloveInertiaFrame = 0;
 
@@ -1380,14 +1380,14 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
         else
         {
             ConsumeInertiaVelocity();
-            float xTotalVelocity = xInertiaVelocity + storedGloveInertia.x;
-            //xVelocity = Math.Abs(storedGloveInertia.x) > xMaxSpeed ? Math.Sign(storedGloveInertia.x) * xMaxSpeed : storedGloveInertia.x;
-            //xInertiaVelocity = Math.Abs(storedGloveInertia.x) > xMaxSpeed ? storedGloveInertia.x - xVelocity : 0;
+            float xTotalVelocity = xInertiaVelocity + storedHangInertia.x;
+            //xVelocity = Math.Abs(storedHangInertia.x) > xMaxSpeed ? Math.Sign(storedHangInertia.x) * xMaxSpeed : storedHangInertia.x;
+            //xInertiaVelocity = Math.Abs(storedHangInertia.x) > xMaxSpeed ? storedHangInertia.x - xVelocity : 0;
             // !!if error, use the code above!!
             xVelocity = Math.Abs(xTotalVelocity) > xMaxSpeed ? Math.Sign(xTotalVelocity) * xMaxSpeed : xTotalVelocity;
             xInertiaVelocity = Math.Abs(xTotalVelocity) > xMaxSpeed ? xTotalVelocity - xVelocity : 0;
 
-            yVelocity = (storedGloveInertia.y + (yInertiaVelocity > 0 ? yInertiaVelocity : 0)) * yGloveEndMultipiler;
+            yVelocity = (storedHangInertia.y + (yInertiaVelocity > 0 ? yInertiaVelocity : 0)) * yGloveEndMultipiler;
             if (gloveDecidedDirection == Direction8.Up)
                 yVelocity *= yGloveEndUpMultipiler;
             if (yVelocity > yJumpVelocity)

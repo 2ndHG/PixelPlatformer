@@ -59,11 +59,11 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
     #endregion
 
     #region Inertia
-    [SerializeField] private int maxStoredInertiaFrame = 10;
+    [SerializeField] private int maxStoredInertiaFrame = 10, maxStoredGloveInertiaFrame = 8;
     [SerializeField] private bool enableInertia;
-    private Vector2 receivedInertia;
+    private Vector2 receivedInertia, gloveInertia;
     private float xInertiaVelocity, yInertiaVelocity;
-    private int storedInertiaFrame;
+    private int storedInertiaFrame, storedGloveInertiaFrame;
     [SerializeField] private float yInertiaEachPixel;
     private bool appliedInertiaThisFrame;
     #endregion
@@ -409,6 +409,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
     private void CalculateXInertia()
     {
         storedInertiaFrame++;
+        storedGloveInertiaFrame++;
         if(appliedInertiaThisFrame)
         {
             appliedInertiaThisFrame = false;
@@ -441,7 +442,8 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
         ChangeState(State.Jump);
 
         //Inertia
-        ConsumeInertiaVelocity(true);
+        ConsumeAndCleanInertiaVelocity();
+        ConsumeAndCleanGloveXInertia();
         yInertiaVelocity = CalculateYInertiaPixel(yInertiaVelocity);
 
         yVelocity = yJumpVelocity + yInertiaVelocity + GamePhysics.Gravity / GamePhysics.FrameRate;
@@ -484,7 +486,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
 
         //Inertia
         //Debug.Log(receivedInertia.x+ " " + facing);
-        ConsumeInertiaVelocity(true);
+        ConsumeAndCleanInertiaVelocity();
         yInertiaVelocity = CalculateYInertiaPixel(yInertiaVelocity);
 
         yVelocity = yJumpVelocity + yInertiaVelocity + GamePhysics.Gravity / GamePhysics.FrameRate;
@@ -547,7 +549,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
         receivedInertia = velocity;
         storedInertiaFrame = 0;
     }
-    public void ConsumeInertiaVelocity(bool willCleanStored = false)
+    public void ConsumeInertiaVelocity()
     {
         if (storedInertiaFrame > maxStoredInertiaFrame)
             return;
@@ -555,13 +557,29 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
         xInertiaVelocity = facing == MathF.Sign(receivedInertia.x) ? receivedInertia.x : 0;
         //add on original inertia, will be faster;
         //xInertiaVelocity += facing == MathF.Sign(receivedInertia.x) ? receivedInertia.x : 0;
+    }
+    public void ConsumeAndCleanInertiaVelocity()
+    {
+        if (storedInertiaFrame > maxStoredInertiaFrame)
+            return;
+        appliedInertiaThisFrame = true;
+        xInertiaVelocity = facing == MathF.Sign(receivedInertia.x) ? receivedInertia.x : 0;
+        
+        yInertiaVelocity = receivedInertia.y;
+        receivedInertia = Vector2.zero;
+        storedInertiaFrame = maxStoredInertiaFrame;
+    }
 
-        if(willCleanStored)
-        {
-            yInertiaVelocity = receivedInertia.y;
-            receivedInertia = Vector2.zero;
-            storedInertiaFrame = maxStoredInertiaFrame;
-        }
+    public void ConsumeAndCleanGloveXInertia()
+    {
+        // call this mathod after ConsumeAndCleanInertiaVelocity()
+        if (storedGloveInertiaFrame > maxStoredGloveInertiaFrame)
+            return;
+        Debug.Log(gloveInertia.x);
+        float xTotalVelocity = xInertiaVelocity + gloveInertia.x;
+
+        xVelocity = Math.Abs(xTotalVelocity) > xMaxSpeed ? Math.Sign(xTotalVelocity) * xMaxSpeed : xTotalVelocity;
+        xInertiaVelocity = Math.Abs(xTotalVelocity) > xMaxSpeed ? xTotalVelocity - xVelocity : 0;
     }
     #endregion
 
@@ -1081,9 +1099,10 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
         // update facing
         HandleForward();
 
+
         xInertiaVelocity = 0;
         //float xOuterInertia = receivedInertia.x;
-        ConsumeInertiaVelocity(true);
+        ConsumeAndCleanInertiaVelocity();
         float xOuterInertia = xInertiaVelocity;
         if (MathF.Abs(xVelocity) > xMaxSpeed)
         {
@@ -1152,6 +1171,9 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
     private void GloveHangStart(Position startPosition, Solid toHang)
     {
         storedGloveInertia = new Vector2(xVelocity, yVelocity);
+        gloveInertia = new Vector2(xVelocity, yVelocity);
+        storedGloveInertiaFrame = 0;
+
         ChangeState(State.GloveHang);
         gloveHanging = true;
         UpdateRidingSolidAndTell(toHang);
@@ -1294,11 +1316,19 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
     }
     private bool CheckReachYMaxHang()
     {
-        return Math.Abs(hangStartPosition.y - (int)(position.y + yRemainder + yVelocity / GamePhysics.FrameRate)) > maxPixelsHangMove;
+        //return Math.Abs(hangStartPosition.y - (int)(position.y + yRemainder + yVelocity / GamePhysics.FrameRate)) > maxPixelsHangMove;
+        if(Math.Abs(hangStartPosition.y - position.y) > maxPixelsHangMove)
+        {
+
+            Debug.Log(hangStartPosition.y + " " + position.y);
+            Debug.Break();
+        }
+        return Math.Abs(hangStartPosition.y - position.y) > maxPixelsHangMove;
     }
     private bool CheckReachXMaxHang()
     {
-        return Math.Abs(hangStartPosition.x - (int)(position.x + xRemainder + xVelocity / GamePhysics.FrameRate)) > maxPixelsHangMove;
+        //return Math.Abs(hangStartPosition.x - (int)(position.x + xRemainder + xVelocity / GamePhysics.FrameRate)) > maxPixelsHangMove;
+        return Math.Abs(hangStartPosition.x - position.x) > maxPixelsHangMove;
     }
     private void CalculateAndMoveHang()
     {
@@ -1322,6 +1352,20 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
             BreakHang();
             return true;
         }
+        // been carried and reach max hang
+        if (CheckReachXMaxHang())
+        {
+            Debug.Log("breakx");
+            BreakHang();
+            return true;
+        }
+        if (CheckReachYMaxHang())
+        {
+            Debug.Log("breaky");
+            BreakHang();
+            return true;
+        }
+
         return false;
     }
     private void BreakHang()
@@ -1331,12 +1375,17 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
         {
             xVelocity = yVelocity = 0;
             xInertiaVelocity = 0;
+            ConsumeInertiaVelocity();
         }
         else
         {
             ConsumeInertiaVelocity();
-            xVelocity = Math.Abs(storedGloveInertia.x) > xMaxSpeed ? Math.Sign(storedGloveInertia.x) * xMaxSpeed : storedGloveInertia.x;
-            xInertiaVelocity = Math.Abs(storedGloveInertia.x) > xMaxSpeed ? storedGloveInertia.x - xVelocity : 0;
+            float xTotalVelocity = xInertiaVelocity + storedGloveInertia.x;
+            //xVelocity = Math.Abs(storedGloveInertia.x) > xMaxSpeed ? Math.Sign(storedGloveInertia.x) * xMaxSpeed : storedGloveInertia.x;
+            //xInertiaVelocity = Math.Abs(storedGloveInertia.x) > xMaxSpeed ? storedGloveInertia.x - xVelocity : 0;
+            // !!if error, use the code above!!
+            xVelocity = Math.Abs(xTotalVelocity) > xMaxSpeed ? Math.Sign(xTotalVelocity) * xMaxSpeed : xTotalVelocity;
+            xInertiaVelocity = Math.Abs(xTotalVelocity) > xMaxSpeed ? xTotalVelocity - xVelocity : 0;
 
             yVelocity = (storedGloveInertia.y + (yInertiaVelocity > 0 ? yInertiaVelocity : 0)) * yGloveEndMultipiler;
             if (gloveDecidedDirection == Direction8.Up)
@@ -1393,13 +1442,13 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
                 bool canMove = GamePhysics.CheckSpecificSolidInArea(leftBottom, rightTop, hangingSolid);
                 if(!canMove)
                 {
-                    if(sign < 0)
+                    if(sign < 0 && position.y > hangingSolidPoint.y)
                     {
                         Vector2 newLeftBottom = new(checkingPoint.x < position.x ? checkingPoint.x : position.x, position.y - 1);
                         Vector2 newRightTop = new(checkingPoint.x > position.x ? checkingPoint.x : position.x + size.width - 1, position.y - 1);
                         canMove = GamePhysics.CheckSpecificSolidInArea(newLeftBottom, newRightTop, hangingSolid);
                     }
-                    else
+                    else if (sign > 0 && position.y < hangingSolidPoint.y)
                     {
                         Vector2 newLeftBottom = new(checkingPoint.x < position.x ? checkingPoint.x : position.x, position.y + size.height);
                         Vector2 newRightTop = new(checkingPoint.x > position.x ? checkingPoint.x : position.x + size.width - 1, position.y + size.height);
@@ -1408,7 +1457,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
                 }
 
                 // reach max distance
-                if (Math.Abs(position.x + sign - hangStartPosition.x) > maxPixelsHangMove)
+                if (Math.Abs(position.y + sign - hangStartPosition.y) > maxPixelsHangMove)
                     canMove = false;
 
                 if (canMove)
@@ -1485,18 +1534,18 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
                     leftBottom.y = position.y - 1;
                     rightTop = GetRightTopPoint();
                 }
-
+                //Debug.Log(leftBottom + " " + rightTop);
                 bool canMove = GamePhysics.CheckSpecificSolidInArea(leftBottom, rightTop, hangingSolid);
-
+                //Debug.Log(canMove);
                 if (!canMove)
                 {
-                    if (sign < 0)
+                    if (sign < 0 && position.x > hangingSolidPoint.x)
                     {
                         Vector2 newLeftBottom = new(position.x - 1, checkingPoint.y < position.y ? checkingPoint.y : position.y);
                         Vector2 newRightTop = new(position.x - 1, checkingPoint.y > position.y ? checkingPoint.y : position.y + size.height - 1);
                         canMove = GamePhysics.CheckSpecificSolidInArea(newLeftBottom, newRightTop, hangingSolid);
                     }
-                    else
+                    else if (sign > 0 && position.x < hangingSolidPoint.x)
                     {
                         Vector2 newLeftBottom = new(position.x + size.width, checkingPoint.y < position.y ? checkingPoint.y : position.y);
                         Vector2 newRightTop = new(position.x + size.width, checkingPoint.y > position.y ? checkingPoint.y : position.y + size.height - 1);

@@ -77,11 +77,12 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
     [SerializeField] private float gloveSpeed;
     [SerializeField] private int gloveLengthAxis = 70, gloveLengthDiagonal = 50;
     [SerializeField] private GameObject GloveHitPoint;
+    [SerializeField] private float xBoostAfterVerticleGlove;
     private const int sizeGloveAxis = 4;
     private const int gloveStopTimeFrame = 4;
     private const int gloveTolerantFrame = 15;
     private const int gloveCorrection = 3, gloveDiagonalCorrection = 6;
-    private const float yGloveEndMultipiler = 0.75f, yGloveEndUpMultipiler = 0.8f;
+    private const float yGloveEndMultipiler = 0.75f, yGloveEndUpMultipiler = 0.86f;
     private const float gloveBackToTrialPixel = 0.75f;
 
     private Position positionBeginGlove, positionGoalGlove, gloveExactHitPixel;
@@ -96,7 +97,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
 
     #region Glove Hang
     private const int maxPixelsHangMove = 10;
-    private const int hangStoreInertiaMaxFrame = 8;
+    private const int hangStoreInertiaMaxFrame = 5;
     private bool gloveHanging;
     [SerializeField] private float hangMoveSpeed;
     private bool upwardHolding, downwardHolding;
@@ -441,9 +442,12 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
         // normal jump
         ChangeState(State.Jump);
 
+        //Debug.Log(xInertiaVelocity);
         //Inertia
         ConsumeAndCleanInertiaVelocity();
         ConsumeAndCleanGloveXInertia();
+        //Debug.Log(xInertiaVelocity);
+
         yInertiaVelocity = CalculateYInertiaPixel(yInertiaVelocity);
 
         yVelocity = yJumpVelocity + yInertiaVelocity + GamePhysics.Gravity / GamePhysics.FrameRate;
@@ -551,7 +555,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
     }
     public void ConsumeInertiaVelocity()
     {
-        if (storedInertiaFrame > maxStoredInertiaFrame)
+        if (storedInertiaFrame >= maxStoredInertiaFrame)
             return;
         appliedInertiaThisFrame = true;
         xInertiaVelocity = facing == MathF.Sign(receivedInertia.x) ? receivedInertia.x : 0;
@@ -560,7 +564,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
     }
     public void ConsumeAndCleanInertiaVelocity()
     {
-        if (storedInertiaFrame > maxStoredInertiaFrame)
+        if (storedInertiaFrame >= maxStoredInertiaFrame)
             return;
         appliedInertiaThisFrame = true;
         xInertiaVelocity = facing == MathF.Sign(receivedInertia.x) ? receivedInertia.x : 0;
@@ -573,13 +577,19 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
     public void ConsumeAndCleanGloveXInertia()
     {
         // call this mathod after ConsumeAndCleanInertiaVelocity()
-        if (storedGloveInertiaFrame > maxStoredGloveInertiaFrame)
+        if (storedGloveInertiaFrame >= maxStoredGloveInertiaFrame)
             return;
-        Debug.Log(gloveInertia.x);
         float xTotalVelocity = xInertiaVelocity + gloveInertia.x;
+        //Debug.Log(xTotalVelocity);
 
         xVelocity = Math.Abs(xTotalVelocity) > xMaxSpeed ? Math.Sign(xTotalVelocity) * xMaxSpeed : xTotalVelocity;
         xInertiaVelocity = Math.Abs(xTotalVelocity) > xMaxSpeed ? xTotalVelocity - xVelocity : 0;
+        //Debug.Log("Glove Hang Jump" + xInertiaVelocity);
+        Debug.Log("Glove Hang Jump");
+    }
+    public void CleanXInertia()
+    {
+        xInertiaVelocity = 0;
     }
     #endregion
 
@@ -761,7 +771,8 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
             GloveHitPoint.transform.position = startPoint + new Vector2(.5f, .5f);
             GloveHitPoint.transform.parent = solidToContact.transform;
 
-            //DetectGloveSurface(new Position(startPoint), solidToContact);
+            storedInertiaFrame = maxStoredInertiaFrame;
+            CleanXInertia();
             UpdateRidingSolidAndTell(solidToContact);
             if(puaseEditorOnGlove)
                 Debug.Break();
@@ -1096,22 +1107,37 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
 
         //base.UpdateRidingSolid() handles leaving from a solid to null
         base.UpdateRidingSolid();
+
         // update facing
         HandleForward();
 
-
-        xInertiaVelocity = 0;
-        //float xOuterInertia = receivedInertia.x;
+        float xTotalVelocity;
         ConsumeAndCleanInertiaVelocity();
-        float xOuterInertia = xInertiaVelocity;
-        if (MathF.Abs(xVelocity) > xMaxSpeed)
+        xTotalVelocity = xVelocity + xInertiaVelocity;
+
+        // if cast verticle glove, boost x if horizontal button is holded
+        if(xTotalVelocity == 0 && (leftForwardHolding || rightForwardHolding))
         {
-            int sign = MathF.Sign(xVelocity);
-            xInertiaVelocity = xVelocity - xMaxSpeed * sign;
-            xVelocity = xMaxSpeed * sign;
+            xTotalVelocity = facing * xBoostAfterVerticleGlove;
         }
-        xInertiaVelocity += xOuterInertia;
+
+        xVelocity = Math.Abs(xTotalVelocity) > xMaxSpeed ? Math.Sign(xTotalVelocity) * xMaxSpeed : xTotalVelocity;
+        xInertiaVelocity = Math.Abs(xTotalVelocity) > xMaxSpeed ? xTotalVelocity - xVelocity : 0;
+
+        //old method
+        //xInertiaVelocity = 0;
+        //ConsumeAndCleanInertiaVelocity();
+        //float xOuterInertia = xInertiaVelocity;
+        //xInertiaVelocity = 0;
+        //if (MathF.Abs(xVelocity) > xMaxSpeed)
+        //{
+        //    int sign = MathF.Sign(xVelocity);
+        //    xInertiaVelocity = xVelocity - xMaxSpeed * sign;
+        //    xVelocity = xMaxSpeed * sign;
+        //}
+        //xInertiaVelocity += xOuterInertia;
         //Debug.Log("Break" + xInertiaVelocity+ " " + xOuterInertia);
+
 
         yVelocity = (yVelocity + (yInertiaVelocity > 0 ? yInertiaVelocity : 0)) * yGloveEndMultipiler;
         if (gloveDecidedDirection == Direction8.Up)
@@ -1121,7 +1147,6 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
         {
             yVelocity = yJumpVelocity + CalculateYInertiaPixel(yVelocity-yJumpVelocity);
         }
-        //Debug.Log(yVelocity);
     }
     private Position DetectGloveExactPixel(Vector2 startPoint, Solid solidToContact)
     {
@@ -1170,9 +1195,17 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
     #region Glove Hang
     private void GloveHangStart(Position startPosition, Solid toHang)
     {
-        storedHangInertia = new Vector2(xVelocity, yVelocity);
-        gloveInertia = new Vector2(xVelocity, yVelocity);
+        if(!IsLeftOrRight(gloveDecidedDirection))
+        {
+            storedHangInertia = new Vector2(xVelocity, yVelocity);
+            gloveInertia = new Vector2(xVelocity, yVelocity);
+        }
+        else
+        {
+            storedHangInertia = gloveInertia = Vector2.zero;
+        }
         storedGloveInertiaFrame = 0;
+        //Debug.Log(storedHangInertia);
 
         ChangeState(State.GloveHang);
         gloveHanging = true;
@@ -1317,12 +1350,6 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
     private bool CheckReachYMaxHang()
     {
         //return Math.Abs(hangStartPosition.y - (int)(position.y + yRemainder + yVelocity / GamePhysics.FrameRate)) > maxPixelsHangMove;
-        if(Math.Abs(hangStartPosition.y - position.y) > maxPixelsHangMove)
-        {
-
-            Debug.Log(hangStartPosition.y + " " + position.y);
-            Debug.Break();
-        }
         return Math.Abs(hangStartPosition.y - position.y) > maxPixelsHangMove;
     }
     private bool CheckReachXMaxHang()
@@ -1340,6 +1367,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
         CalculateXHang();
         HangMoveX(xVelocity / GamePhysics.FrameRate);
         frameAfterHang++;
+        storedGloveInertiaFrame++;
     }
     private bool CheckBreakHang()
     {
@@ -1371,7 +1399,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
     private void BreakHang()
     {
         //Debug.Log("break Hang");
-        if(frameAfterHang > hangStoreInertiaMaxFrame)
+        if(frameAfterHang > hangStoreInertiaMaxFrame || IsLeftOrRight(gloveDecidedDirection))
         {
             xVelocity = yVelocity = 0;
             xInertiaVelocity = 0;
@@ -1379,6 +1407,9 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
         }
         else
         {
+            // not really sure here, because already use the glove inertia, cannot use again, so disabled it
+            storedGloveInertiaFrame = maxStoredGloveInertiaFrame;
+
             ConsumeInertiaVelocity();
             float xTotalVelocity = xInertiaVelocity + storedHangInertia.x;
             //xVelocity = Math.Abs(storedHangInertia.x) > xMaxSpeed ? Math.Sign(storedHangInertia.x) * xMaxSpeed : storedHangInertia.x;
@@ -1660,6 +1691,8 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
             }
 
             bool normalJump = CheckPlatformBelow() || framesAfterGround <= coyoteFrames;
+
+            // one-way platform jump
             if(yVelocity > 0)
             {
                 for (int i = -yOWPJumpDownExtends; !normalJump && i <= yOWPJumpUpExtend; i++)

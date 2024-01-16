@@ -59,7 +59,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
     #endregion
 
     #region Inertia
-    [SerializeField] private int maxStoredInertiaFrame = 10, maxStoredGloveInertiaFrame = 8;
+    [SerializeField] private int maxStoredInertiaFrame = 10, maxStoredGloveInertiaFrame = 6;
     [SerializeField] private bool enableInertia;
     private Vector2 receivedInertia, gloveInertia;
     private float xInertiaVelocity, yInertiaVelocity;
@@ -127,6 +127,11 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
         {
             currentState = toState;
         }
+    }
+
+    bool IsNormalState()
+    {
+        return currentState == State.Idle || currentState == State.Jump || currentState == State.Walk;
     }
 
     void CheckSolidOnFrameStart()
@@ -420,7 +425,7 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
             return;
 
         // if not forwarding the same direction of Inertia, it decrease
-        if ((xInertiaVelocity < 0 && !leftForwardHolding ) || (xInertiaVelocity > 0 && !rightForwardHolding) || CheckPlatformBelow())
+        if ((xInertiaVelocity < 0 && !leftForwardHolding) || (xInertiaVelocity > 0 && !rightForwardHolding) || CheckPlatformBelow())
         {
             int sign = MathF.Sign(xInertiaVelocity);
             xInertiaVelocity -= sign * xStopAcceleration / GamePhysics.FrameRate;
@@ -428,8 +433,8 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
             {
                 xInertiaVelocity = 0;
             }
-        } 
-        else if((xInertiaVelocity < 0 && CheckPlatformLeft()) || (xInertiaVelocity > 0 && CheckPlatformRight()))
+        }
+        else if ((xInertiaVelocity < 0 && CheckPlatformLeft()) || (xInertiaVelocity > 0 && CheckPlatformRight()))
         {
             xInertiaVelocity = 0;
         }
@@ -450,13 +455,14 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
 
         yInertiaVelocity = CalculateYInertiaPixel(yInertiaVelocity);
 
-        yVelocity = yJumpVelocity + yInertiaVelocity + GamePhysics.Gravity / GamePhysics.FrameRate;
-        //Debug.Log(yVelocity);
+        yVelocity = yJumpVelocity + yInertiaVelocity + GamePhysics.Gravity / GamePhysics.FrameRate;     
         yInertiaVelocity = 0;
         jumpInputBuffer = 0;
         frameAfterJump = 0;
         framesAfterGround = coyoteFrames + 1;
         forceJumpTimer = 0;
+
+        //Debug.Log(xInertiaVelocity + " " + yInertiaVelocity);
     }
 
     public void ForceJump(float yInitial, float jumpTime = 1)
@@ -579,13 +585,12 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
         // call this mathod after ConsumeAndCleanInertiaVelocity()
         if (storedGloveInertiaFrame >= maxStoredGloveInertiaFrame)
             return;
-        float xTotalVelocity = xInertiaVelocity + gloveInertia.x;
-        //Debug.Log(xTotalVelocity);
 
+        float xTotalVelocity = xInertiaVelocity + gloveInertia.x;
         xVelocity = Math.Abs(xTotalVelocity) > xMaxSpeed ? Math.Sign(xTotalVelocity) * xMaxSpeed : xTotalVelocity;
         xInertiaVelocity = Math.Abs(xTotalVelocity) > xMaxSpeed ? xTotalVelocity - xVelocity : 0;
-        //Debug.Log("Glove Hang Jump" + xInertiaVelocity);
-        Debug.Log("Glove Hang Jump");
+        xInertiaVelocity += Math.Sign(xInertiaVelocity) * xStopAcceleration / GamePhysics.FrameRate;
+        //Debug.Log("Glove Hang Jump");
     }
     public void CleanXInertia()
     {
@@ -1672,65 +1677,121 @@ public class PlayerController : Actor, IInertiaReceiver, ISolidUpdateReceiver
 
         if (jumpInputBuffer > 0)
         {
-            bool solidLeft = false;
-            bool solidRight = false;
-            Vector2 positionL = new(position.x, position.y);
-            Vector2 positionR = positionL;
-            for (int i=0; i<=wallJumpTolerant; i++)
-            {
-                if (!solidLeft)
+            if(IsNormalState()) 
+            { 
+                bool solidLeft = false;
+                bool solidRight = false;
+                Vector2 positionL = new(position.x, position.y);
+                Vector2 positionR = positionL;
+                for (int i=0; i<=wallJumpTolerant; i++)
                 {
-                    solidLeft = solidLeft || CheckPlatformLeft(positionL);
-                    positionL.x--;
-                }
-                if (!solidRight)
-                {
-                    solidRight = solidRight || CheckPlatformRight(positionR);
-                    positionR.x++;
-                }
-            }
-
-            bool normalJump = CheckPlatformBelow() || framesAfterGround <= coyoteFrames;
-
-            // one-way platform jump
-            if(yVelocity > 0)
-            {
-                for (int i = -yOWPJumpDownExtends; !normalJump && i <= yOWPJumpUpExtend; i++)
-                {
-                    if (i != 0)
+                    if (!solidLeft)
                     {
-                        //the -1 is like check below
-                        Solid[] platforms = GamePhysics.GetHorizontalSolids(new Vector2(position.x, position.y + i - 1), new Vector2(position.x + size.width - 1, position.y + i - 1));
-                        foreach (Solid platform in platforms)
-                        {
-                            if (platform.IsOneWayPlatform() && platform.GetComponent<OneWayPlatform>().collidingDirection == Direction8.Up)
-                            {
-                                normalJump = true;
-                                Debug.Log("GO");
-                                break;
-                            }
-                        }
-
+                        solidLeft = solidLeft || CheckPlatformLeft(positionL);
+                        positionL.x--;
+                    }
+                    if (!solidRight)
+                    {
+                        solidRight = solidRight || CheckPlatformRight(positionR);
+                        positionR.x++;
                     }
                 }
-            }
 
-            if (normalJump)
-            {
-                // normal jump
-                NormalJump();
+                bool normalJump = CheckPlatformBelow() || framesAfterGround <= coyoteFrames;
+
+                // one-way platform jump
+                if(yVelocity > 0)
+                {
+                    for (int i = -yOWPJumpDownExtends; !normalJump && i <= yOWPJumpUpExtend; i++)
+                    {
+                        if (i != 0)
+                        {
+                            //the -1 is like check below
+                            Solid[] platforms = GamePhysics.GetHorizontalSolids(new Vector2(position.x, position.y + i - 1), new Vector2(position.x + size.width - 1, position.y + i - 1));
+                            foreach (Solid platform in platforms)
+                            {
+                                if (platform.IsOneWayPlatform() && platform.GetComponent<OneWayPlatform>().collidingDirection == Direction8.Up)
+                                {
+                                    normalJump = true;
+                                    Debug.Log("GO");
+                                    break;
+                                }
+                            }
+
+                        }
+                    }
+                }
+
+                if (normalJump)
+                {
+                    // normal jump
+                    NormalJump();
+                }
+                else if(solidLeft && solidRight)
+                {
+                    WallJump(-facing);
+                }
+                else if(solidLeft)
+                {
+                    WallJump(1);
+                }
+                else if(solidRight)
+                {
+                    WallJump(-1);
+                }
             }
-            else if(solidLeft && solidRight)
+            else if (currentState == State.Glove || currentState == State.GloveHang)
             {
-                WallJump(-facing);
-            }
-            else if(solidLeft)
-            {
-                WallJump(1);
-            }
-            else if(solidRight)
-            {
-                WallJump(-1);
+                bool solidLeft = false;
+                bool solidRight = false;
+                Vector2 positionL = new(position.x, position.y);
+                Vector2 positionR = positionL;
+                for (int i = 0; i <= wallJumpTolerant; i++)
+                {
+                    if (!solidLeft)
+                    {
+                        solidLeft = solidLeft || CheckPlatformLeft(positionL);
+                        positionL.x--;
+                    }
+                    if (!solidRight)
+                    {
+                        solidRight = solidRight || CheckPlatformRight(positionR);
+                        positionR.x++;
+                    }
+                }
+                bool normalJump = true;
+
+                if(xGloveDirection != 0)
+                {
+                    if (solidLeft == true && xGloveDirection == -1 && rightForwardHolding)
+                    {
+                        normalJump = false;
+                        solidLeft = true;
+                    }
+                    else
+                        solidLeft = false;
+
+                    if (solidRight == true && xGloveDirection == 1 && leftForwardHolding)
+                    {
+                        normalJump = false;
+                        solidRight = true;
+                    }
+                    else
+                        solidRight = false;
+                }
+                if (normalJump)
+                {
+                    NormalJump();
+                }
+                else if (solidLeft)
+                {
+                    WallJump(1);
+                }
+                else if (solidRight)
+                {
+                    WallJump(-1);
+                }
+
             }
             jumpInputBuffer--;
         }
